@@ -92,8 +92,13 @@ export function describeCapabilities(config: ServerConfig): readonly string[] {
     config.infermedica.enabled && !config.forceLocalScorer
       ? 'Clinical scorer: Infermedica /triage (live)'
       : `Clinical scorer: LOCAL FALLBACK${config.forceLocalScorer ? ' (forced)' : ' — no INFERMEDICA_APP_ID/APP_KEY'}. Risk tiers carry a degradation notice.`,
+    // Deliberately reports the ADAPTER, not the credential. An earlier version
+    // printed "Groq configured" whenever a key was present, which was true and
+    // misleading in the same breath: the key is loaded, and nothing calls it.
+    // Every reasoning result still comes from the keyword-lexicon stand-in.
     config.groq.apiKey !== undefined
-      ? `Reasoning      : Groq configured (${config.groq.textModel})`
+      ? `Reasoning      : KEY PRESENT BUT UNUSED (${config.groq.textModel}) — no Groq adapter is wired; the mock reasoning port is answering.`
       : 'Reasoning      : mock reasoning port — no GROQ_API_KEY.',
+    'External tools : ALL MOCKED — normalization, knowledge, medication, coding, hospitals, notifications. No outbound API call is made by this build.',
   ];
 }
