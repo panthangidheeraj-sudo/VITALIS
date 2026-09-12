@@ -25,6 +25,22 @@ const TEST_CONFIG: ServerConfig = {
   firebase: { credentialsPath: undefined, projectId: undefined, enabled: false },
   groq: { apiKey: undefined, textModel: 'x', visionModel: 'y' },
   infermedica: { appId: undefined, appKey: undefined, baseUrl: '', enabled: false },
+  // Unreachable hosts on purpose: these tests build their own tools below and
+  // must never touch the network. A real URL here would let a future edit
+  // silently start calling NIH from CI.
+  icd11: {
+    clientId: undefined,
+    clientSecret: undefined,
+    tokenUrl: 'http://127.0.0.1:9/token',
+    baseUrl: 'http://127.0.0.1:9',
+    release: undefined,
+    enabled: false,
+  },
+  knowledge: {
+    medlinePlusSearchUrl: 'http://127.0.0.1:9/query',
+    wikipediaBaseUrl: 'http://127.0.0.1:9',
+  },
+  rxnav: { baseUrl: 'http://127.0.0.1:9' },
   forceLocalScorer: true,
 };
 

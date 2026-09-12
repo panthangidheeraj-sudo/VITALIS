@@ -20,13 +20,14 @@ import {
   LocalDeterministicScorer,
   MockCodingPort,
   MockHospitalPort,
-  MockKnowledgePort,
-  MockMedicationPort,
   MockNormalizationPort,
   MockNotificationPort,
   MockReasoningPort,
 } from '@triage/agent';
 import type { ServerConfig } from '../config.js';
+import { HealthKnowledgePort } from '../adapters/knowledge-port.js';
+import { Icd11CodingPort } from '../adapters/icd11-coding-port.js';
+import { RxNavMedicationPort } from '../adapters/rxnav-medication-port.js';
 import { FirestoreCaseStore } from '../store/firestore-case-store.js';
 import { DEMO_LEXICON } from './demo-lexicon.js';
 import { SystemClock, UuidIdPort } from './system-ports.js';
@@ -68,9 +69,21 @@ export function buildServerTools(config: ServerConfig): BuiltTools {
     // that separation is enforced by the port interface itself, not by config.
     reasoning: new MockReasoningPort(clock),
 
-    knowledge: new MockKnowledgePort(),
-    medication: new MockMedicationPort(),
-    coding: new MockCodingPort(),
+    // --- Real adapters, all free tier -------------------------------------
+    // None of these can influence the risk tier: KnowledgePort explains,
+    // MedicationPort normalises names, CodingPort labels an already-derived
+    // category. The port interfaces have no method that returns a severity.
+    knowledge: new HealthKnowledgePort(config.knowledge),
+    medication: new RxNavMedicationPort(config.rxnav.baseUrl),
+    coding: config.icd11.enabled
+      ? new Icd11CodingPort({
+          clientId: config.icd11.clientId as string,
+          clientSecret: config.icd11.clientSecret as string,
+          tokenUrl: config.icd11.tokenUrl,
+          baseUrl: config.icd11.baseUrl,
+          release: config.icd11.release,
+        })
+      : new MockCodingPort(),
     hospitals: new MockHospitalPort(),
     notifications: new MockNotificationPort(),
     store,

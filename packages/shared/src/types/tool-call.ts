@@ -29,6 +29,10 @@ export const TOOL_NAMES = [
   'infermedica.search',
   'infermedica.triage',
   'medlineplus.explain',
+  // General-explanation fallback when MedlinePlus has no topic. Deliberately a
+  // distinct tool name rather than being folded into medlineplus.explain: the
+  // ledger has to show which source actually answered.
+  'wikipedia.summary',
   'rxnorm.normalize',
   'icd11.code',
   'osm.find_hospitals',
@@ -54,6 +58,7 @@ export const TOOL_ROLES: Record<ToolName, ToolRole> = {
   'infermedica.search': 'normalization',
   'infermedica.triage': 'clinical_scoring',
   'medlineplus.explain': 'knowledge',
+  'wikipedia.summary': 'knowledge',
   'rxnorm.normalize': 'normalization',
   'icd11.code': 'coding',
   'osm.find_hospitals': 'logistics',

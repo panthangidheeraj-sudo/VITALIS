@@ -73,7 +73,7 @@ export const LANGUAGE_LABELS: Record<Language, string> = {
  */
 export interface Citation {
   /** Which knowledge tool produced this. */
-  readonly provider: 'medlineplus' | 'infermedica' | 'rxnorm' | 'icd11';
+  readonly provider: 'medlineplus' | 'infermedica' | 'rxnorm' | 'icd11' | 'wikipedia';
   /** Human-readable source title, e.g. "MedlinePlus: Chest Pain". */
   readonly title: string;
   readonly url?: string;

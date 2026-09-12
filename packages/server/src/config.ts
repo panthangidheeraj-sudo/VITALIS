@@ -46,6 +46,30 @@ export interface ServerConfig {
     readonly baseUrl: string;
     readonly enabled: boolean;
   };
+  /**
+   * WHO ICD-11. OAuth2 client credentials; the token host is separate from the
+   * API host, which is why both URLs are configurable.
+   */
+  readonly icd11: {
+    readonly clientId: string | undefined;
+    readonly clientSecret: string | undefined;
+    readonly tokenUrl: string;
+    readonly baseUrl: string;
+    /** Pinned release (e.g. "2024-01"); undefined uses WHO's current release. */
+    readonly release: string | undefined;
+    readonly enabled: boolean;
+  };
+  /**
+   * The keyless knowledge sources. No `enabled` flag because there is no
+   * credential to be missing - these are always available or the network is
+   * down, and the adapter reports that itself.
+   */
+  readonly knowledge: {
+    readonly medlinePlusSearchUrl: string;
+    readonly wikipediaBaseUrl: string;
+  };
+  /** RxNorm / RxNav. Keyless, same reasoning as above. */
+  readonly rxnav: { readonly baseUrl: string };
   /** Force the local deterministic scorer even when Infermedica is configured. */
   readonly forceLocalScorer: boolean;
 }
@@ -55,6 +79,8 @@ export function loadConfig(): ServerConfig {
   const projectId = optional('FIREBASE_PROJECT_ID');
   const infermedicaAppId = optional('INFERMEDICA_APP_ID');
   const infermedicaAppKey = optional('INFERMEDICA_APP_KEY');
+  const icd11ClientId = optional('ICD11_CLIENT_ID');
+  const icd11ClientSecret = optional('ICD11_CLIENT_SECRET');
 
   return {
     port: Number(optional('PORT') ?? 8787),
@@ -75,6 +101,20 @@ export function loadConfig(): ServerConfig {
       baseUrl: optional('INFERMEDICA_BASE_URL') ?? 'https://api.infermedica.com/v3',
       enabled: infermedicaAppId !== undefined && infermedicaAppKey !== undefined,
     },
+    icd11: {
+      clientId: icd11ClientId,
+      clientSecret: icd11ClientSecret,
+      tokenUrl: optional('ICD11_TOKEN_URL') ?? 'https://icdaccessmanagement.who.int/connect/token',
+      baseUrl: optional('ICD11_BASE_URL') ?? 'https://id.who.int',
+      release: optional('ICD11_RELEASE'),
+      enabled: icd11ClientId !== undefined && icd11ClientSecret !== undefined,
+    },
+    knowledge: {
+      medlinePlusSearchUrl:
+        optional('MEDLINEPLUS_SEARCH_URL') ?? 'https://wsearch.nlm.nih.gov/ws/query',
+      wikipediaBaseUrl: optional('WIKIPEDIA_BASE_URL') ?? 'https://en.wikipedia.org',
+    },
+    rxnav: { baseUrl: optional('RXNAV_BASE_URL') ?? 'https://rxnav.nlm.nih.gov/REST' },
     forceLocalScorer: optional('FORCE_LOCAL_SCORER') === 'true',
   };
 }
@@ -99,6 +139,11 @@ export function describeCapabilities(config: ServerConfig): readonly string[] {
     config.groq.apiKey !== undefined
       ? `Reasoning      : KEY PRESENT BUT UNUSED (${config.groq.textModel}) — no Groq adapter is wired; the mock reasoning port is answering.`
       : 'Reasoning      : mock reasoning port — no GROQ_API_KEY.',
-    'External tools : ALL MOCKED — normalization, knowledge, medication, coding, hospitals, notifications. No outbound API call is made by this build.',
+    'Knowledge      : LIVE — MedlinePlus (NIH) primary, Wikipedia declared fallback.',
+    'Medication     : LIVE — RxNorm/RxNav (NIH). Name normalisation only; interaction checking is NOT available (endpoint retired Jan 2024).',
+    config.icd11.enabled
+      ? `Coding         : LIVE — WHO ICD-11 (${config.icd11.release ?? 'current release'})`
+      : 'Coding         : mock coding port — no ICD11_CLIENT_ID/CLIENT_SECRET.',
+    'Still mocked   : evidence normalization, hospitals, notifications.',
   ];
 }

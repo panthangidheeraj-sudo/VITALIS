@@ -50,7 +50,7 @@ export const geoFixSchema = geoPointSchema.extend({
 });
 
 export const citationSchema = z.object({
-  provider: z.enum(['medlineplus', 'infermedica', 'rxnorm', 'icd11']),
+  provider: z.enum(['medlineplus', 'infermedica', 'rxnorm', 'icd11', 'wikipedia']),
   title: z.string().min(1),
   url: z.string().url().optional(),
   conceptId: z.string().optional(),
