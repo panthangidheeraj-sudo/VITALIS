@@ -26,9 +26,16 @@ import { colors, radius, spacing, tierColor, tierLabel, type } from '../theme';
 interface Props {
   readonly caseId: CaseId;
   readonly onCancelled: () => void;
+  readonly onOpenCompanion: () => void;
+  readonly onOpenHandoff: () => void;
 }
 
-export function TrackingScreen({ caseId, onCancelled }: Props) {
+export function TrackingScreen({
+  caseId,
+  onCancelled,
+  onOpenCompanion,
+  onOpenHandoff,
+}: Props) {
   const live = useCaseState(isFirebaseConfigured() ? caseId : undefined);
   const [cancelling, setCancelling] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
@@ -126,6 +133,17 @@ export function TrackingScreen({ caseId, onCancelled }: Props) {
           </View>
         ) : null}
 
+        <View style={styles.utilityRow}>
+          <Pressable style={styles.utilityButton} onPress={onOpenCompanion}>
+            <Text style={styles.utilityText}>Monitoring</Text>
+            <Text style={type.tiny}>Trends and next check</Text>
+          </Pressable>
+          <Pressable style={styles.utilityButton} onPress={onOpenHandoff}>
+            <Text style={styles.utilityText}>Doctor handoff</Text>
+            <Text style={type.tiny}>Clinical summary card</Text>
+          </Pressable>
+        </View>
+
         {error !== undefined ? <Text style={styles.inlineError}>{error}</Text> : null}
         <View style={{ height: 96 }} />
       </ScrollView>
@@ -198,6 +216,18 @@ const styles = StyleSheet.create({
   timelineText: { ...type.small, flex: 1, color: colors.text },
 
   inlineError: { ...type.small, color: colors.danger },
+
+  utilityRow: { flexDirection: 'row', gap: spacing.sm },
+  utilityButton: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: 2,
+  },
+  utilityText: { fontSize: 14, fontWeight: '700', color: colors.text },
 
   cancelBar: {
     position: 'absolute',

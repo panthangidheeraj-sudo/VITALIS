@@ -21,6 +21,8 @@ import { api } from '../api/client';
 interface Props {
   readonly onStartEmergency: () => void;
   readonly onOpenFirstAid: () => void;
+  readonly onOpenEmergencyCard: () => void;
+  readonly onOpenLanguage: () => void;
 }
 
 const DEMO_VITALS = [
@@ -35,7 +37,12 @@ const DEMO_MEDICATIONS = [
   { name: 'Amlodipine 5 mg', when: '9:00 PM', taken: false },
 ];
 
-export function HomeScreen({ onStartEmergency, onOpenFirstAid }: Props) {
+export function HomeScreen({
+  onStartEmergency,
+  onOpenFirstAid,
+  onOpenEmergencyCard,
+  onOpenLanguage,
+}: Props) {
   const [serverOk, setServerOk] = useState<boolean | undefined>(undefined);
   const [scorer, setScorer] = useState<string | undefined>(undefined);
 
@@ -108,6 +115,19 @@ export function HomeScreen({ onStartEmergency, onOpenFirstAid }: Props) {
         <Text style={type.small}>{FIRST_AID_TOPICS.length} guides stored on this device</Text>
       </Pressable>
 
+      {/* Secondary entry points. Deliberately below the emergency button and
+          visually quieter - nothing here should compete with it. */}
+      <View style={styles.utilityRow}>
+        <Pressable style={styles.utilityButton} onPress={onOpenEmergencyCard}>
+          <Text style={styles.utilityText}>Emergency card</Text>
+          <Text style={type.tiny}>Blood group, allergies, contacts</Text>
+        </Pressable>
+        <Pressable style={styles.utilityButton} onPress={onOpenLanguage}>
+          <Text style={styles.utilityText}>Language</Text>
+          <Text style={type.tiny}>English / हिन्दी / తెలుగు / தமிழ்</Text>
+        </Pressable>
+      </View>
+
       <View style={{ height: spacing.xxl }} />
     </ScrollView>
   );
@@ -146,6 +166,18 @@ function ConnectionRow({ ok, scorer }: { ok: boolean | undefined; scorer: string
 }
 
 const styles = StyleSheet.create({
+  utilityRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
+  utilityButton: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: 2,
+  },
+  utilityText: { fontSize: 14, fontWeight: '700', color: colors.text },
+
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.lg, gap: spacing.md },
   subtitle: { ...type.small, marginTop: -spacing.sm },
