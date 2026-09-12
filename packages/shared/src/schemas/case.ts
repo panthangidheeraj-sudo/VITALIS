@@ -82,7 +82,7 @@ export const riskAssessmentSchema = z
     seriousFlags: z.array(seriousFlagSchema),
     triageTuples: z.array(triageTupleSchema),
     teleconsultationApplicable: z.boolean().optional(),
-    source: z.enum(['infermedica', 'local_fallback']),
+    source: z.enum(['local_rules', 'infermedica', 'local_fallback']),
     degradedReason: z.string().optional(),
     evidenceCount: z.number().int().nonnegative(),
     computedAt: isoTimestampSchema,

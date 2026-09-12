@@ -77,12 +77,19 @@ export interface TriageTuple {
 
 /** Which engine produced an assessment. Surfaced in the UI, never hidden. */
 export type RiskSource =
-  /** Live Infermedica `/triage` response. Full confidence. */
+  /**
+   * The project's own deterministic red-flag engine. PRIMARY since Infermedica
+   * was dropped. Explicit, readable rules; no model involved. Carries no
+   * degradation notice because nothing is degraded.
+   */
+  | 'local_rules'
+  /** Live Infermedica `/triage` response. Retained for a future integration. */
   | 'infermedica'
   /**
-   * Local deterministic rule table. Used when Infermedica is unreachable or
-   * out of quota. Conservative by construction — it rounds UP, never down.
-   * Always accompanied by a DegradationNotice (spec §6 fallback requirement).
+   * A degraded estimate produced when a scoring path failed. ALWAYS
+   * accompanied by a DegradationNotice (spec §6). Nothing emits this today -
+   * it is kept so that a future engine has a declared degraded state to fall
+   * into rather than inventing one.
    */
   | 'local_fallback';
 

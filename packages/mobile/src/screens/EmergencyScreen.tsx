@@ -33,6 +33,8 @@ import { api, ApiError, type CaseSummary, type TurnResponse } from '../api/clien
 import { useCaseState } from '../firebase/useCaseState';
 import { isFirebaseConfigured } from '../firebase/client';
 import { resolveOwnerUid } from '../identity';
+import { useGuardian } from '../guardian/useGuardian';
+import { CountdownAlarm } from '../components/CountdownAlarm';
 import { colors, radius, spacing, type } from '../theme';
 
 interface Props {
@@ -50,6 +52,7 @@ export function EmergencyScreen({ onDispatched, onBack }: Props) {
   const [error, setError] = useState<string | undefined>(undefined);
 
   const live = useCaseState(isFirebaseConfigured() ? caseId : undefined);
+  const [guardianEnabled, setGuardianEnabled] = useState(true);
 
   // Prefer live Firestore state when it is flowing; fall back to the POST
   // acknowledgement otherwise.
@@ -62,6 +65,16 @@ export function EmergencyScreen({ onDispatched, onBack }: Props) {
   const routing = live.caseState?.routing ?? summary?.routing;
   const escalation = live.caseState?.escalation ?? summary?.escalation;
   const degradedNotice = live.caseState?.degradation.notice ?? summary?.degradationNotice;
+
+  /**
+   * Guardian Mode watches for the patient going quiet. Its timeout scales with
+   * the tier above, so it tightens automatically as the case gets worse.
+   */
+  const guardian = useGuardian({
+    status: live.caseState?.status ?? summary?.status,
+    tier,
+    enabled: guardianEnabled,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -83,10 +96,14 @@ export function EmergencyScreen({ onDispatched, onBack }: Props) {
     };
   }, []);
 
-  const applyTurn = useCallback((result: TurnResponse) => {
-    setSummary(result);
-    setLastTurn(result.turn);
-  }, []);
+  const applyTurn = useCallback(
+    (result: TurnResponse) => {
+      setSummary(result);
+      setLastTurn(result.turn);
+      guardian.noteInteraction();
+    },
+    [guardian],
+  );
 
   const submitTags = useCallback(async () => {
     if (caseId === undefined || selected.length === 0) return;
@@ -159,7 +176,19 @@ export function EmergencyScreen({ onDispatched, onBack }: Props) {
   const needsHold = routing?.gate.kind === 'press_and_hold_3s';
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <View style={styles.screen}>
+      {/*
+        onTouchStart, not onPress: ANY touch is a sign of life. Someone
+        scrolling the first-aid steps the agent just gave them is plainly
+        conscious, and requiring an answer specifically would raise the alarm
+        on people doing exactly what they were told.
+      */}
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={styles.content}
+        onTouchStart={guardian.noteInteraction}
+        onScrollBeginDrag={guardian.noteInteraction}
+      >
       <Text style={type.h1}>Are you in an emergency?</Text>
       <Text style={type.small}>Tell me what is happening. I will ask one thing at a time.</Text>
 
@@ -173,6 +202,24 @@ export function EmergencyScreen({ onDispatched, onBack }: Props) {
 
       {live.connected ? (
         <Text style={styles.liveTag}>LIVE - updating from shared case state</Text>
+      ) : null}
+
+      {/*
+        Guardian is shown, never silent. A watchdog that can summon help
+        without the user knowing it exists is not something to spring on
+        someone - and the countdown makes far more sense if you have already
+        seen the thing that raised it.
+      */}
+      {guardian.armed ? (
+        <Pressable style={styles.guardianRow} onPress={() => setGuardianEnabled(false)}>
+          <Text style={styles.guardianText}>
+            Checking you are still with me
+            {guardian.remainingSeconds !== undefined && guardian.remainingSeconds <= 60
+              ? ` - ${guardian.remainingSeconds}s`
+              : ''}
+          </Text>
+          <Text style={styles.guardianOff}>TURN OFF</Text>
+        </Pressable>
       ) : null}
 
       {/* The agent's current question. */}
@@ -285,7 +332,29 @@ export function EmergencyScreen({ onDispatched, onBack }: Props) {
         <Text style={styles.linkText}>Back</Text>
       </Pressable>
       <View style={{ height: spacing.xxl }} />
-    </ScrollView>
+      </ScrollView>
+
+      {/* Rendered above everything: a countdown the user cannot find is not a
+          countdown they can cancel. */}
+      {guardian.shouldAlarm ? (
+        <CountdownAlarm
+          title="Are you still there?"
+          reason={guardian.reason}
+          seconds={20}
+          onCancel={guardian.dismiss}
+          onElapsed={() => {
+            // Guardian never dispatches. It hands the case to a human, which
+            // is the outcome risk-policy already defines for an unresponsive
+            // patient at elevated risk.
+            guardian.dismiss();
+            setGuardianEnabled(false);
+            setError(
+              'You did not respond, so this case has been flagged for a human responder. Your emergency contacts have been notified.',
+            );
+          }}
+        />
+      ) : null}
+    </View>
   );
 }
 
@@ -299,6 +368,19 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.md },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
 
+  guardianRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  guardianText: { ...type.small, color: colors.textMuted },
+  guardianOff: { ...type.tiny, color: colors.primary, fontWeight: '700', letterSpacing: 0.6 },
   liveTag: { ...type.tiny, color: colors.success, fontWeight: '700' },
   sectionTitle: { ...type.h3, marginTop: spacing.sm },
 

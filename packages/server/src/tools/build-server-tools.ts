@@ -7,11 +7,11 @@
  * credentials arrive they are replaced one at a time behind identical
  * interfaces.
  *
- * Those stand-ins are not "test doubles left in production by accident" — they
- * are the declared degraded mode. `LocalDeterministicScorer` in particular is
- * the real §6 fallback engine, and every result it returns carries a
- * `DegradationNotice` that surfaces to the patient. Nothing here can silently
- * pretend to be the live clinical engine.
+ * Those stand-ins are not "test doubles left in production by accident" - they
+ * are the declared degraded mode, and each says so on every result it returns.
+ * `LocalDeterministicScorer` is the exception: it is the PRIMARY clinical
+ * engine now that Infermedica has been dropped, and it reports itself as live
+ * because it is. Nothing here can silently pretend to be something it is not.
  */
 
 import type { AgentTools, CaseStorePort } from '@triage/shared';
@@ -25,6 +25,7 @@ import {
   MockReasoningPort,
 } from '@triage/agent';
 import type { ServerConfig } from '../config.js';
+import { GeminiVisionPort } from '../adapters/gemini-vision-port.js';
 import { GroqReasoningPort } from '../adapters/groq-reasoning-port.js';
 import { HealthKnowledgePort } from '../adapters/knowledge-port.js';
 import { Icd11CodingPort } from '../adapters/icd11-coding-port.js';
@@ -38,6 +39,37 @@ export interface BuiltTools {
   readonly tools: AgentTools;
   /** True when writes land in real Firestore and the mobile app can observe them live. */
   readonly firestoreEnabled: boolean;
+}
+
+/**
+ * Layers the reasoning adapters: Groq for text, Gemini wrapped around it for
+ * vision, the deterministic stand-in underneath both. Each layer overrides only
+ * what it can actually do, so a missing key removes one capability rather than
+ * the whole port.
+ */
+function buildReasoning(config: ServerConfig, clock: SystemClock) {
+  const base = config.groq.enabled
+    ? new GroqReasoningPort(
+        {
+          apiKey: config.groq.apiKey as string,
+          baseUrl: config.groq.baseUrl,
+          textModel: config.groq.textModel,
+          visionModel: config.groq.visionModel,
+        },
+        new MockReasoningPort(clock),
+      )
+    : new MockReasoningPort(clock);
+
+  return config.gemini.enabled
+    ? new GeminiVisionPort(
+        {
+          apiKey: config.gemini.apiKey as string,
+          baseUrl: config.gemini.baseUrl,
+          visionModel: config.gemini.visionModel,
+        },
+        base,
+      )
+    : base;
 }
 
 export function buildServerTools(config: ServerConfig): BuiltTools {
@@ -58,29 +90,18 @@ export function buildServerTools(config: ServerConfig): BuiltTools {
     clock,
     ids: new UuidIdPort(),
 
-    // The only source of a clinical risk tier. Until Infermedica credentials
-    // exist this is the conservative local fallback, and it says so on every
-    // single result it returns.
+    // The only source of a clinical risk tier, and a deterministic rule table
+    // rather than a model. See packages/agent/src/scoring/rules.ts.
     risk: new LocalDeterministicScorer(clock),
 
     // Stands in for Infermedica /parse and /search.
     normalize: new MockNormalizationPort(DEMO_LEXICON),
 
-    // Groq, with the deterministic stand-in as its fallback rather than as a
-    // replacement. Note that NEITHER has a method that can return a risk tier -
-    // that separation is enforced by the port interface, not by config, so it
-    // holds identically whether Groq is reachable or not.
-    reasoning: config.groq.enabled
-      ? new GroqReasoningPort(
-          {
-            apiKey: config.groq.apiKey as string,
-            baseUrl: config.groq.baseUrl,
-            textModel: config.groq.textModel,
-            visionModel: config.groq.visionModel,
-          },
-          new MockReasoningPort(clock),
-        )
-      : new MockReasoningPort(clock),
+    // Groq for text, Gemini for vision, deterministic stand-in underneath.
+    // None of the three has a method that can return a risk tier - that is
+    // enforced by the port interface, not by config, so it holds identically
+    // whichever of them is reachable.
+    reasoning: buildReasoning(config, clock),
 
     // --- Real adapters, all free tier -------------------------------------
     // None of these can influence the risk tier: KnowledgePort explains,

@@ -16,6 +16,7 @@ export * from './evidence/apply-evidence.js';
 export * from './confidence/confidence-policy.js';
 export * from './contradiction/resolve.js';
 export * from './scoring/local-deterministic-scorer.js';
+export * from './scoring/rules.js';
 export * from './quick-select.js';
 
 export * from './testing/manual-clock.js';

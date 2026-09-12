@@ -51,7 +51,7 @@ export function buildNewCase(input: CreateCaseInput, tools: AgentTools): CaseSta
       triageLevel: 'self_care',
       seriousFlags: [],
       triageTuples: [],
-      source: 'local_fallback',
+      source: 'local_rules',
       // Honest from the first instant: nothing has been assessed yet, and the
       // green tier below is a default, not a finding.
       degradedReason: 'No clinical assessment has been run yet — this is a starting default, not a result.',

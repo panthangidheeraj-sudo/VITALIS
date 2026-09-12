@@ -26,7 +26,7 @@ export interface CaseSummary {
   readonly status: string;
   readonly riskTier: RiskTier;
   readonly triageLevel: string;
-  readonly scoringSource: 'infermedica' | 'local_fallback';
+  readonly scoringSource: 'local_rules' | 'infermedica' | 'local_fallback';
   readonly degraded: boolean;
   readonly degradationNotice?: string;
   readonly confidence: { readonly score: number; readonly level: string };

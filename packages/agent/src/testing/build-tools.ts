@@ -73,7 +73,7 @@ export function freshCaseState(
       triageLevel: 'self_care',
       seriousFlags: [],
       triageTuples: [],
-      source: 'local_fallback',
+      source: 'local_rules',
       degradedReason: 'No assessment has been run yet.',
       evidenceCount: 0,
       computedAt: now,

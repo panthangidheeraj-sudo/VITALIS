@@ -278,12 +278,16 @@ describe('escalation rather than invented certainty', () => {
       state = result.nextState;
     }
 
-    // Local fallback scoring on a red-tier case is exactly the condition
-    // mustEscalateUnresolved treats as too uncertain to act on autonomously.
-    expect(state.risk.source).toBe('local_fallback');
-    if (state.risk.tier === 'red') {
-      expect(state.escalation.escalated).toBe(true);
-      expect(state.status).toBe('escalated');
+    // The rule engine is primary now, so a red tier is a confident finding
+    // rather than a degraded guess: the agent PROPOSES an action instead of
+    // escalating for lack of a scorer. It still escalates on genuine
+    // uncertainty - low confidence or an unresolved contradiction - which the
+    // cases above cover.
+    expect(state.risk.source).toBe('local_rules');
+    expect(state.risk.tier).toBe('red');
+    expect(state.risk.seriousFlags.length + state.risk.triageTuples.length).toBeGreaterThan(0);
+    if (!state.escalation.escalated) {
+      expect(state.routing).toBeDefined();
     }
   });
 });

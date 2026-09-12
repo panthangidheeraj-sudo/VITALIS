@@ -81,6 +81,15 @@ function ensureAuth(): Auth {
   return auth;
 }
 
+/**
+ * The Auth instance, for callers that need it directly (Google linking).
+ * Exported rather than re-deriving it, so there is exactly one initialisation
+ * path and the React Native persistence setup above cannot be bypassed.
+ */
+export function getAuthInstance(): Auth {
+  return ensureAuth();
+}
+
 export function getDb(): Firestore {
   if (db !== undefined) return db;
   db = getFirestore(ensureApp());

@@ -38,7 +38,13 @@ describe('levelForPresentCount', () => {
 });
 
 describe('LocalDeterministicScorer', () => {
-  it('always reports itself as a fallback source, never as live', async () => {
+  /**
+   * Inverted deliberately when Infermedica was dropped. This engine is now
+   * PRIMARY, so reporting itself as degraded would light the degradation
+   * banner permanently - and a warning that is always on is a warning nobody
+   * reads, including on the one case where it matters.
+   */
+  it('reports itself as a live primary engine, not a degraded fallback', async () => {
     const scorer = new LocalDeterministicScorer(new ManualClock());
     const result = await scorer.score({
       sex: 'male',
@@ -46,13 +52,11 @@ describe('LocalDeterministicScorer', () => {
       evidence: [{ id: 's_21', choice_id: 'present' }],
     });
     expect(result.ok).toBe(true);
-    if (result.ok && result.source === 'fallback') {
-      expect(result.data.source).toBe('local_fallback');
-      expect(result.data.degradedReason).toBeTruthy();
-      expect(result.degraded.conservative).toBe(true);
-    } else {
-      expect.unreachable('LocalDeterministicScorer must always report source "fallback"');
-    }
+    expect(result.source).toBe('live');
+    if (!result.ok) return;
+    expect(result.data.source).toBe('local_rules');
+    // No degradation notice, because nothing is degraded.
+    expect(result.data.degradedReason).toBeUndefined();
   });
 
   it('escalates the tier as more symptoms accumulate across calls', async () => {

@@ -30,7 +30,7 @@ export function createApp({ tools, config, firestoreEnabled }: AppDeps): Express
       ok: true,
       firestoreEnabled,
       clinicalScorer:
-        config.infermedica.enabled && !config.forceLocalScorer ? 'infermedica' : 'local_fallback',
+        config.infermedica.enabled && !config.forceLocalScorer ? 'infermedica' : 'local_rules',
     });
   });
 

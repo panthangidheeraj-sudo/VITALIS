@@ -72,6 +72,17 @@ export interface ServerConfig {
   };
   /** RxNorm / RxNav. Keyless, same reasoning as above. */
   readonly rxnav: { readonly baseUrl: string };
+  /**
+   * Google Gemini, used for VISION ONLY. Groq keeps every text task. Without a
+   * key the injury-photo path stays unavailable and says so, rather than
+   * silently returning nothing.
+   */
+  readonly gemini: {
+    readonly apiKey: string | undefined;
+    readonly baseUrl: string;
+    readonly visionModel: string;
+    readonly enabled: boolean;
+  };
   /** Force the local deterministic scorer even when Infermedica is configured. */
   readonly forceLocalScorer: boolean;
 }
@@ -82,6 +93,7 @@ export function loadConfig(): ServerConfig {
   const infermedicaAppId = optional('INFERMEDICA_APP_ID');
   const infermedicaAppKey = optional('INFERMEDICA_APP_KEY');
   const groqApiKey = optional('GROQ_API_KEY');
+  const geminiApiKey = optional('GEMINI_API_KEY');
   const icd11ClientId = optional('ICD11_CLIENT_ID');
   const icd11ClientSecret = optional('ICD11_CLIENT_SECRET');
 
@@ -120,6 +132,12 @@ export function loadConfig(): ServerConfig {
       wikipediaBaseUrl: optional('WIKIPEDIA_BASE_URL') ?? 'https://en.wikipedia.org',
     },
     rxnav: { baseUrl: optional('RXNAV_BASE_URL') ?? 'https://rxnav.nlm.nih.gov/REST' },
+    gemini: {
+      apiKey: geminiApiKey,
+      baseUrl: optional('GEMINI_BASE_URL') ?? 'https://generativelanguage.googleapis.com/v1beta',
+      visionModel: optional('GEMINI_VISION_MODEL') ?? 'gemini-2.0-flash',
+      enabled: geminiApiKey !== undefined,
+    },
     forceLocalScorer: optional('FORCE_LOCAL_SCORER') === 'true',
   };
 }
@@ -134,9 +152,10 @@ export function describeCapabilities(config: ServerConfig): readonly string[] {
     config.firebase.enabled
       ? `Firestore      : ENABLED (project ${config.firebase.projectId})`
       : 'Firestore      : DISABLED — no GOOGLE_APPLICATION_CREDENTIALS. Using in-memory store; the mobile app will NOT receive live updates.',
-    config.infermedica.enabled && !config.forceLocalScorer
-      ? 'Clinical scorer: Infermedica /triage (live)'
-      : `Clinical scorer: LOCAL FALLBACK${config.forceLocalScorer ? ' (forced)' : ' — no INFERMEDICA_APP_ID/APP_KEY'}. Risk tiers carry a degradation notice.`,
+    // The rule engine is PRIMARY since Infermedica was dropped, so this no
+    // longer reports a permanent degradation. A banner that is always lit is a
+    // banner nobody reads on the one case where it matters.
+    'Clinical scorer: LIVE - deterministic red-flag rule engine. No model can produce a risk tier.',
     // Reports the ADAPTER, not the credential: "key present" is not the same
     // claim as "calls are being made", and an earlier version conflated them.
     config.groq.enabled
@@ -147,6 +166,9 @@ export function describeCapabilities(config: ServerConfig): readonly string[] {
     config.icd11.enabled
       ? `Coding         : LIVE — WHO ICD-11 (${config.icd11.release ?? 'current release'})`
       : 'Coding         : mock coding port — no ICD11_CLIENT_ID/CLIENT_SECRET.',
+    config.gemini.enabled
+      ? `Vision         : LIVE - Gemini ${config.gemini.visionModel} (injury photos only; Groq keeps all text tasks)`
+      : 'Vision         : UNAVAILABLE - no GEMINI_API_KEY. Injury photo assessment is disabled and says so.',
     'Still mocked   : evidence normalization, hospitals, notifications.',
   ];
 }

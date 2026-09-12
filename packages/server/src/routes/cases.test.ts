@@ -47,6 +47,12 @@ const TEST_CONFIG: ServerConfig = {
     wikipediaBaseUrl: 'http://127.0.0.1:9',
   },
   rxnav: { baseUrl: 'http://127.0.0.1:9' },
+  gemini: {
+    apiKey: undefined,
+    baseUrl: 'http://127.0.0.1:9',
+    visionModel: 'x',
+    enabled: false,
+  },
   forceLocalScorer: true,
 };
 
@@ -98,10 +104,11 @@ async function newCase(): Promise<string> {
 
 describe('the press-and-hold gate (§5.2, non-negotiable)', () => {
   /**
-   * Reaching `ambulance_dispatch` through the interview requires a live
-   * clinical score — the local fallback always escalates a red tier instead,
-   * by design. So the case is seeded directly into the state the gate guards,
-   * which is the only way to test the gate itself rather than the path to it.
+   * The case is seeded directly into the state the gate guards, so these tests
+   * exercise the GATE rather than the path to it. Driving the interview would
+   * couple every gate assertion to the scoring rules, and a rule change would
+   * then quietly stop testing the one safety property 5.2 calls
+   * non-negotiable.
    */
   async function seedAmbulanceCase(): Promise<string> {
     const caseId = asCaseId(`case_gate_${Math.random().toString(36).slice(2)}`);
@@ -178,15 +185,16 @@ describe('the press-and-hold gate (§5.2, non-negotiable)', () => {
   });
 
   it('does not require a hold for an outcome whose gate is not press-and-hold', async () => {
+    // Symptoms chosen to AVOID the red-flag rules: a headache plus dizziness
+    // raises the tier by accumulation, not by a named emergency pattern, so
+    // the outcome stays below ambulance dispatch. Chest pain with left-arm
+    // radiation would now fire a combination rule and reach press-and-hold.
     const caseId = await newCase();
-    await post(`/cases/${caseId}/turns`, { kind: 'text', text: 'I have chest pain' });
-    await post(`/cases/${caseId}/turns`, {
-      kind: 'text',
-      text: 'the pain is going down my left arm',
-    });
+    await post(`/cases/${caseId}/turns`, { kind: 'text', text: 'I have a headache' });
+    await post(`/cases/${caseId}/turns`, { kind: 'text', text: 'i feel dizzy' });
 
     const state = await store.get(asCaseId(caseId));
-    expect(state?.routing?.gate.kind).toBe('explicit_confirm');
+    expect(state?.routing?.gate.kind).not.toBe('press_and_hold_3s');
 
     const res = await post(`/cases/${caseId}/confirm`, { heldMs: 0 });
     expect(res.status).toBe(200);
@@ -225,7 +233,14 @@ describe('case lifecycle over HTTP', () => {
     expect(state?.status).toBe('interviewing');
   });
 
-  it('escalates rather than acting when the clinical scorer is degraded at red', async () => {
+  /**
+   * Rewritten when the rule engine became primary. This previously asserted
+   * that a red case escalated BECAUSE scoring was degraded - which was true
+   * only while Infermedica was the intended engine and this one was standing
+   * in. Now a red tier is a confident finding, and asserting the old
+   * behaviour would have locked in a permanently-lit degradation banner.
+   */
+  it('reaches red through a named red flag, with no degradation claimed', async () => {
     const caseId = await newCase();
     await post(`/cases/${caseId}/turns`, { kind: 'text', text: 'I have chest pain' });
     await post(`/cases/${caseId}/turns`, { kind: 'text', text: 'pain going down my left arm' });
@@ -233,15 +248,21 @@ describe('case lifecycle over HTTP', () => {
 
     const body = (await res.json()) as {
       riskTier: string;
+      scoringSource: string;
       escalation: { escalated: boolean; detail?: string };
       degraded: boolean;
       degradationNotice?: string;
     };
     expect(body.riskTier).toBe('red');
-    expect(body.escalation.escalated).toBe(true);
-    expect(body.degraded).toBe(true);
-    // The degradation is stated, never silent (§6).
-    expect(body.degradationNotice).toBeTruthy();
+    expect(body.scoringSource).toBe('local_rules');
+    // The banner must be dark on a healthy case, or it means nothing when lit.
+    expect(body.degraded).toBe(false);
+    expect(body.degradationNotice).toBeUndefined();
+
+    // And the tier traces to a rule that can be named, not to a symptom count.
+    const state = await store.get(asCaseId(caseId));
+    expect(state?.risk.triageTuples.length).toBeGreaterThan(0);
+    expect(state?.risk.rootCause).toContain('red_flag');
   });
 
   it('404s an unknown case', async () => {
