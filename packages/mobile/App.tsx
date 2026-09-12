@@ -21,6 +21,11 @@ import { EmergencyScreen } from './src/screens/EmergencyScreen';
 import { HandoffScreen } from './src/screens/HandoffScreen';
 import { LanguageScreen } from './src/screens/LanguageScreen';
 import { PhotoInjuryScreen } from './src/screens/PhotoInjuryScreen';
+import { EmergencyQrScreen } from './src/screens/EmergencyQrScreen';
+import { MedicineScannerScreen } from './src/screens/MedicineScannerScreen';
+import { SilentDistressScreen } from './src/screens/SilentDistressScreen';
+import { CountdownAlarm } from './src/components/CountdownAlarm';
+import { startFallDetection } from './src/sensors/fallSensor';
 import { FirstAidScreen } from './src/screens/FirstAidScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { TrackingScreen } from './src/screens/TrackingScreen';
@@ -40,12 +45,32 @@ type Screen =
   | { readonly name: 'language' }
   | { readonly name: 'companion'; readonly caseId: CaseId }
   | { readonly name: 'handoff'; readonly caseId: CaseId }
-  | { readonly name: 'photo' };
+  | { readonly name: 'photo' }
+  | { readonly name: 'qr' }
+  | { readonly name: 'medicine' }
+  | { readonly name: 'silent' };
+
+/**
+ * Seconds to cancel an AUTOMATIC alert before contacts are notified.
+ *
+ * Long enough to fish the phone out of a pocket and read the screen; short
+ * enough that a real fall is not left waiting. Nothing here dispatches an
+ * ambulance - that still requires the 3-second press-and-hold gate.
+ */
+const AUTO_ALERT_COUNTDOWN_SECONDS = 30;
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>({ name: 'home' });
   // Language is app-level, not per-screen: changing it must not restart a case.
   const [language, setLanguage] = useState<Language>('en');
+  /**
+   * An automatic trigger (a detected fall today, Guardian Mode next) shows the
+   * countdown OVER whatever screen is open, rather than navigating. Navigating
+   * would lose whatever the user was doing, and the alert may well be wrong.
+   */
+  const [autoAlert, setAutoAlert] = useState<{ title: string; reason: string } | undefined>(
+    undefined,
+  );
 
   useEffect(() => {
     // Cache first-aid content before it is ever needed - the one thing that
@@ -57,6 +82,19 @@ export default function App() {
     // Firebase project degrades the live-update feature instead of blocking
     // the whole app at launch.
     if (isFirebaseConfigured()) void ensureSignedIn();
+
+    // Fall detection runs for the life of the app. It never dispatches - it
+    // can only raise the cancellable countdown below.
+    let stop: (() => void) | undefined;
+    void startFallDetection((event) => {
+      setAutoAlert({
+        title: 'Possible fall detected',
+        reason: `A sharp impact (${event.impactG.toFixed(1)}g) followed by no movement.`,
+      });
+    }).then((fn) => {
+      stop = fn;
+    });
+    return () => stop?.();
   }, []);
 
   return (
@@ -68,6 +106,9 @@ export default function App() {
           onOpenFirstAid={() => setScreen({ name: 'firstAid' })}
           onOpenEmergencyCard={() => setScreen({ name: 'emergencyCard' })}
           onOpenLanguage={() => setScreen({ name: 'language' })}
+          onOpenQr={() => setScreen({ name: 'qr' })}
+          onOpenMedicine={() => setScreen({ name: 'medicine' })}
+          onOpenSilent={() => setScreen({ name: 'silent' })}
         />
       ) : null}
 
@@ -120,6 +161,38 @@ export default function App() {
 
       {screen.name === 'photo' ? (
         <PhotoInjuryScreen onBack={() => setScreen({ name: 'emergency' })} />
+      ) : null}
+
+      {screen.name === 'qr' ? (
+        <EmergencyQrScreen onBack={() => setScreen({ name: 'home' })} />
+      ) : null}
+
+      {screen.name === 'medicine' ? (
+        <MedicineScannerScreen onBack={() => setScreen({ name: 'home' })} />
+      ) : null}
+
+      {screen.name === 'silent' ? (
+        <SilentDistressScreen
+          onSharePing={() => {
+            // Deliberately silent: no toast, no log the user can see. The
+            // adversary in this mode is standing next to them.
+          }}
+          onExit={() => setScreen({ name: 'home' })}
+        />
+      ) : null}
+
+      {/* Rendered last so it covers whatever is beneath it. */}
+      {autoAlert !== undefined ? (
+        <CountdownAlarm
+          title={autoAlert.title}
+          reason={autoAlert.reason}
+          seconds={AUTO_ALERT_COUNTDOWN_SECONDS}
+          onCancel={() => setAutoAlert(undefined)}
+          onElapsed={() => {
+            setAutoAlert(undefined);
+            setScreen({ name: 'emergency' });
+          }}
+        />
       ) : null}
     </SafeAreaView>
   );

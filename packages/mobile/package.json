@@ -13,12 +13,16 @@
     "@react-native-async-storage/async-storage": "2.2.0",
     "@triage/shared": "*",
     "expo": "~57.0.22",
+    "expo-keep-awake": "~57.0.2",
     "expo-location": "~57.0.17",
+    "expo-sensors": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "firebase": "^12.19.0",
     "react": "19.2.3",
     "react-native": "0.86.3",
-    "react-native-maps": "1.27.2"
+    "react-native-maps": "1.27.2",
+    "react-native-qrcode-svg": "^6.3.24",
+    "react-native-svg": "15.15.4"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

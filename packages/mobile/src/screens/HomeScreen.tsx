@@ -23,6 +23,9 @@ interface Props {
   readonly onOpenFirstAid: () => void;
   readonly onOpenEmergencyCard: () => void;
   readonly onOpenLanguage: () => void;
+  readonly onOpenQr: () => void;
+  readonly onOpenMedicine: () => void;
+  readonly onOpenSilent: () => void;
 }
 
 const DEMO_VITALS = [
@@ -42,6 +45,9 @@ export function HomeScreen({
   onOpenFirstAid,
   onOpenEmergencyCard,
   onOpenLanguage,
+  onOpenQr,
+  onOpenMedicine,
+  onOpenSilent,
 }: Props) {
   const [serverOk, setServerOk] = useState<boolean | undefined>(undefined);
   const [scorer, setScorer] = useState<string | undefined>(undefined);
@@ -128,6 +134,27 @@ export function HomeScreen({
         </Pressable>
       </View>
 
+      <View style={styles.utilityRow}>
+        <Pressable style={styles.utilityButton} onPress={onOpenQr}>
+          <Text style={styles.utilityText}>Emergency QR</Text>
+          <Text style={type.tiny}>Scannable by any responder</Text>
+        </Pressable>
+        <Pressable style={styles.utilityButton} onPress={onOpenMedicine}>
+          <Text style={styles.utilityText}>Medicine scanner</Text>
+          <Text style={type.tiny}>Identify a pack, check expiry</Text>
+        </Pressable>
+      </View>
+
+      {/*
+        Silent Distress deliberately does NOT look like an emergency control.
+        Anything alarming here is visible to the person the mode exists to
+        hide from, and a user who has to explain a big red button has already
+        lost. It reads as an ordinary settings row.
+      */}
+      <Pressable style={styles.quietRow} onPress={onOpenSilent}>
+        <Text style={styles.quietText}>Discreet mode</Text>
+      </Pressable>
+
       <View style={{ height: spacing.xxl }} />
     </ScrollView>
   );
@@ -177,6 +204,8 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   utilityText: { fontSize: 14, fontWeight: '700', color: colors.text },
+  quietRow: { paddingVertical: spacing.md, alignItems: 'center' },
+  quietText: { fontSize: 13, color: colors.textMuted },
 
   screen: { flex: 1, backgroundColor: colors.bg },
   content: { padding: spacing.lg, gap: spacing.md },

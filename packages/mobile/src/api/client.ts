@@ -50,6 +50,19 @@ export interface TurnResponse extends CaseSummary {
   };
 }
 
+export interface MedicationLookup {
+  readonly medications: readonly {
+    readonly reportedName: string;
+    readonly rxcui?: string;
+    readonly normalizedName?: string;
+  }[];
+  readonly verified: boolean;
+  readonly degradationNotice?: string;
+  /** Always false. See packages/server/src/routes/medications.ts for why. */
+  readonly interactionsChecked: false;
+  readonly interactionNotice: string;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -125,4 +138,8 @@ export const api = {
     request<CaseSummary>(`/cases/${caseId}/confirm`, { heldMs }),
 
   cancel: (caseId: CaseId) => request<CaseSummary>(`/cases/${caseId}/cancel`),
+
+  /** RxNorm name normalisation. Never returns interaction data - see the route. */
+  normalizeMedications: (names: readonly string[]) =>
+    request<MedicationLookup>('/medications/normalize', { names }),
 };

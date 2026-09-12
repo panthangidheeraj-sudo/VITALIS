@@ -9,6 +9,7 @@ import express, { type Express } from 'express';
 import type { AgentTools } from '@triage/shared';
 import type { ServerConfig } from './config.js';
 import { createCaseRoutes, errorHandler } from './routes/cases.js';
+import { createMedicationRoutes } from './routes/medications.js';
 
 export interface AppDeps {
   readonly tools: AgentTools;
@@ -34,6 +35,7 @@ export function createApp({ tools, config, firestoreEnabled }: AppDeps): Express
   });
 
   app.use('/cases', createCaseRoutes(tools));
+  app.use('/medications', createMedicationRoutes(tools));
   app.use(errorHandler);
 
   return app;
