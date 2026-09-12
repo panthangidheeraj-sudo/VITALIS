@@ -37,8 +37,10 @@ export interface ServerConfig {
   };
   readonly groq: {
     readonly apiKey: string | undefined;
+    readonly baseUrl: string;
     readonly textModel: string;
     readonly visionModel: string;
+    readonly enabled: boolean;
   };
   readonly infermedica: {
     readonly appId: string | undefined;
@@ -79,6 +81,7 @@ export function loadConfig(): ServerConfig {
   const projectId = optional('FIREBASE_PROJECT_ID');
   const infermedicaAppId = optional('INFERMEDICA_APP_ID');
   const infermedicaAppKey = optional('INFERMEDICA_APP_KEY');
+  const groqApiKey = optional('GROQ_API_KEY');
   const icd11ClientId = optional('ICD11_CLIENT_ID');
   const icd11ClientSecret = optional('ICD11_CLIENT_SECRET');
 
@@ -91,9 +94,11 @@ export function loadConfig(): ServerConfig {
       enabled: credentialsPath !== undefined && projectId !== undefined,
     },
     groq: {
-      apiKey: optional('GROQ_API_KEY'),
-      textModel: optional('GROQ_MODEL_TEXT') ?? 'llama-3.3-70b-versatile',
-      visionModel: optional('GROQ_MODEL_VISION') ?? 'meta-llama/llama-4-scout-17b-16e-instruct',
+      apiKey: groqApiKey,
+      baseUrl: optional('GROQ_BASE_URL') ?? 'https://api.groq.com/openai/v1',
+      enabled: groqApiKey !== undefined,
+      textModel: optional('GROQ_MODEL_TEXT') ?? 'openai/gpt-oss-120b',
+      visionModel: optional('GROQ_MODEL_VISION') ?? 'openai/gpt-oss-120b',
     },
     infermedica: {
       appId: infermedicaAppId,
@@ -132,12 +137,10 @@ export function describeCapabilities(config: ServerConfig): readonly string[] {
     config.infermedica.enabled && !config.forceLocalScorer
       ? 'Clinical scorer: Infermedica /triage (live)'
       : `Clinical scorer: LOCAL FALLBACK${config.forceLocalScorer ? ' (forced)' : ' — no INFERMEDICA_APP_ID/APP_KEY'}. Risk tiers carry a degradation notice.`,
-    // Deliberately reports the ADAPTER, not the credential. An earlier version
-    // printed "Groq configured" whenever a key was present, which was true and
-    // misleading in the same breath: the key is loaded, and nothing calls it.
-    // Every reasoning result still comes from the keyword-lexicon stand-in.
-    config.groq.apiKey !== undefined
-      ? `Reasoning      : KEY PRESENT BUT UNUSED (${config.groq.textModel}) — no Groq adapter is wired; the mock reasoning port is answering.`
+    // Reports the ADAPTER, not the credential: "key present" is not the same
+    // claim as "calls are being made", and an earlier version conflated them.
+    config.groq.enabled
+      ? `Reasoning      : LIVE — Groq ${config.groq.textModel} (vision: ${config.groq.visionModel}). Falls back to the deterministic stand-in on failure.`
       : 'Reasoning      : mock reasoning port — no GROQ_API_KEY.',
     'Knowledge      : LIVE — MedlinePlus (NIH) primary, Wikipedia declared fallback.',
     'Medication     : LIVE — RxNorm/RxNav (NIH). Name normalisation only; interaction checking is NOT available (endpoint retired Jan 2024).',

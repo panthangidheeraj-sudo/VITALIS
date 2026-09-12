@@ -23,7 +23,13 @@ const TEST_CONFIG: ServerConfig = {
   port: 0,
   nodeEnv: 'test',
   firebase: { credentialsPath: undefined, projectId: undefined, enabled: false },
-  groq: { apiKey: undefined, textModel: 'x', visionModel: 'y' },
+  groq: {
+    apiKey: undefined,
+    baseUrl: 'http://127.0.0.1:9/v1',
+    textModel: 'x',
+    visionModel: 'y',
+    enabled: false,
+  },
   infermedica: { appId: undefined, appKey: undefined, baseUrl: '', enabled: false },
   // Unreachable hosts on purpose: these tests build their own tools below and
   // must never touch the network. A real URL here would let a future edit

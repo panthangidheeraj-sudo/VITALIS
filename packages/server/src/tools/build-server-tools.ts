@@ -25,6 +25,7 @@ import {
   MockReasoningPort,
 } from '@triage/agent';
 import type { ServerConfig } from '../config.js';
+import { GroqReasoningPort } from '../adapters/groq-reasoning-port.js';
 import { HealthKnowledgePort } from '../adapters/knowledge-port.js';
 import { Icd11CodingPort } from '../adapters/icd11-coding-port.js';
 import { RxNavMedicationPort } from '../adapters/rxnav-medication-port.js';
@@ -65,9 +66,21 @@ export function buildServerTools(config: ServerConfig): BuiltTools {
     // Stands in for Infermedica /parse and /search.
     normalize: new MockNormalizationPort(DEMO_LEXICON),
 
-    // Stands in for Groq. Note it has no method that can return a risk tier —
-    // that separation is enforced by the port interface itself, not by config.
-    reasoning: new MockReasoningPort(clock),
+    // Groq, with the deterministic stand-in as its fallback rather than as a
+    // replacement. Note that NEITHER has a method that can return a risk tier -
+    // that separation is enforced by the port interface, not by config, so it
+    // holds identically whether Groq is reachable or not.
+    reasoning: config.groq.enabled
+      ? new GroqReasoningPort(
+          {
+            apiKey: config.groq.apiKey as string,
+            baseUrl: config.groq.baseUrl,
+            textModel: config.groq.textModel,
+            visionModel: config.groq.visionModel,
+          },
+          new MockReasoningPort(clock),
+        )
+      : new MockReasoningPort(clock),
 
     // --- Real adapters, all free tier -------------------------------------
     // None of these can influence the risk tier: KnowledgePort explains,

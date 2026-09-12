@@ -76,22 +76,43 @@ describe('no Groq output schema can carry a clinical classification', () => {
 });
 
 describe('JSON Schema and zod agree', () => {
-  it('requires the same keys on both sides', () => {
+  /**
+   * Groq's strict structured-output mode rejects any schema whose `required`
+   * omits a declared property, so `required` cannot mirror zod's optionality
+   * directly. The contract is instead:
+   *   - the JSON Schema requires EVERY property (Groq's rule), and
+   *   - anything zod treats as optional is declared NULLABLE there.
+   * A field added to one side and forgotten on the other still fails here.
+   */
+  it('declares every property as required, as Groq strict mode demands', () => {
+    for (const { name } of GROQ_SCHEMA_PAIRS) {
+      const jsonSchema = GROQ_JSON_SCHEMAS[name as keyof typeof GROQ_JSON_SCHEMAS];
+      const properties = Object.keys(jsonSchema.properties as Record<string, unknown>);
+      const required = [...(jsonSchema.required as readonly string[])];
+      expect(
+        required.sort(),
+        `${name}: Groq rejects a strict schema whose required omits a property`,
+      ).toEqual(properties.sort());
+    }
+  });
+
+  it('expresses zod-optional fields as nullable rather than absent', () => {
     for (const { name, zod } of GROQ_SCHEMA_PAIRS) {
       const jsonSchema = GROQ_JSON_SCHEMAS[name as keyof typeof GROQ_JSON_SCHEMAS];
-      const required = new Set<string>(jsonSchema.required as readonly string[]);
-
+      const properties = jsonSchema.properties as Record<string, { type?: unknown }>;
       const shape = (zod as unknown as { shape: Record<string, z.ZodTypeAny> }).shape;
-      const zodRequired = new Set(
-        Object.entries(shape)
-          .filter(([, s]) => !s.isOptional())
-          .map(([key]) => key),
-      );
 
-      expect(
-        [...zodRequired].sort(),
-        `${name}: zod required keys differ from the JSON Schema`,
-      ).toEqual([...required].sort());
+      for (const [key, schema] of Object.entries(shape)) {
+        const declared = properties[key];
+        expect(declared, `${name}.${key} is missing from the JSON Schema`).toBeDefined();
+        if (!schema.isOptional()) continue;
+
+        const type = declared?.type;
+        expect(
+          Array.isArray(type) && type.includes('null'),
+          `${name}.${key} is optional in zod but not nullable in the JSON Schema`,
+        ).toBe(true);
+      }
     }
   });
 

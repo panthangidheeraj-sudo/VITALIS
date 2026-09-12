@@ -163,11 +163,19 @@ export const GROQ_JSON_SCHEMAS = {
   select_next_question: {
     type: 'object',
     additionalProperties: false,
+    // NOTE: `required` lists EVERY property, including the ones zod treats as
+    // optional. That is not a mistake and not a change of contract - Groq's
+    // strict structured-output mode rejects a schema whose `required` omits any
+    // declared property ("`required` ... must include every key in
+    // properties"). Genuinely optional fields are expressed as nullable
+    // instead, and the adapter drops nulls before zod sees them, so the zod
+    // schema stays the single source of truth about what is optional.
     required: [
       'text',
       'targetConceptIds',
       'rationale',
       'expectedInformationGain',
+      'choices',
       'language',
       'hardToDeflect',
     ],
@@ -177,7 +185,7 @@ export const GROQ_JSON_SCHEMAS = {
       rationale: { type: 'string' },
       expectedInformationGain: { type: 'number', minimum: 0, maximum: 1 },
       choices: {
-        type: 'array',
+        type: ['array', 'null'],
         items: {
           type: 'object',
           additionalProperties: false,
@@ -222,12 +230,13 @@ export const GROQ_JSON_SCHEMAS = {
   read_communication_state: {
     type: 'object',
     additionalProperties: false,
-    required: ['state', 'certainty', 'signals'],
+    required: ['state', 'certainty', 'signals', 'detectedLanguage'],
     properties: {
       state: { type: 'string', enum: [...COMMUNICATION_STATES] },
       certainty: { type: 'number', minimum: 0, maximum: 1 },
       signals: { type: 'array', items: { type: 'string' } },
-      detectedLanguage: { type: 'string', enum: ['en', 'hi', 'te', 'ta'] },
+      // Nullable rather than absent - see the note on select_next_question.
+      detectedLanguage: { type: ['string', 'null'], enum: ['en', 'hi', 'te', 'ta', null] },
     },
   },
   describe_injury_photo: {
