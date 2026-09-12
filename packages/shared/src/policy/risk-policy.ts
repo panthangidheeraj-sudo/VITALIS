@@ -41,7 +41,10 @@ import { PRESS_AND_HOLD_DURATION_MS, ROUTING_OUTCOME_RANK } from '../types/routi
 export const TRIAGE_LEVEL_TO_TIER: Record<TriageLevel, RiskTier> = {
   emergency_ambulance: 'red',
   emergency: 'red',
-  consultation_24: 'yellow',
+  // Orange splits what used to be one yellow band: "be seen within 24 hours"
+  // is a different instruction from "book an appointment", and a patient acts
+  // on them differently.
+  consultation_24: 'orange',
   consultation: 'yellow',
   self_care: 'green',
 };
@@ -224,12 +227,19 @@ export function allowedRoutingOutcomes(
         ? [escalate]
         : ['ambulance_dispatch', 'er_self_transport', escalate];
 
-    case 'yellow':
-      // Low confidence removes the gentlest option — do not send someone home
-      // on information we do not trust.
+    case 'orange':
+      // Urgent, but ambulance is not indicated. Low confidence removes the
+      // gentlest option - do not send someone home on information we do not
+      // trust. Ambulance is deliberately absent here: an orange case that
+      // genuinely needs one should have been scored red.
       return confidenceLevel === 'low'
         ? ['urgent_care_now', 'er_self_transport', escalate]
         : ['primary_care_24h', 'urgent_care_now', 'er_self_transport', escalate];
+
+    case 'yellow':
+      return confidenceLevel === 'low'
+        ? ['primary_care_24h', 'urgent_care_now', escalate]
+        : ['self_care_guidance', 'primary_care_24h', 'urgent_care_now', escalate];
 
     case 'green':
       return confidenceLevel === 'low'

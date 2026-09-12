@@ -45,7 +45,10 @@ describe('triage level → risk tier', () => {
   it('places both emergency levels in red and self_care in green', () => {
     expect(tierFor('emergency_ambulance')).toBe('red');
     expect(tierFor('emergency')).toBe('red');
-    expect(tierFor('consultation_24')).toBe('yellow');
+    // consultation_24 ("be seen within a day") and consultation ("book an
+    // appointment") are different instructions to the patient, so they carry
+    // different tiers.
+    expect(tierFor('consultation_24')).toBe('orange');
     expect(tierFor('consultation')).toBe('yellow');
     expect(tierFor('self_care')).toBe('green');
   });
@@ -62,9 +65,25 @@ describe('allowed routing outcomes', () => {
     expect(allowedRoutingOutcomes('red', 'low')).toEqual(['escalate_human_unresolved']);
   });
 
-  it('removes the gentlest option from yellow when confidence is low', () => {
-    expect(allowedRoutingOutcomes('yellow', 'high')).toContain('primary_care_24h');
-    expect(allowedRoutingOutcomes('yellow', 'low')).not.toContain('primary_care_24h');
+  it('removes the gentlest option from a tier when confidence is low', () => {
+    // Each tier drops its own gentlest outcome: never send someone home on
+    // information the agent does not trust.
+    expect(allowedRoutingOutcomes('yellow', 'high')).toContain('self_care_guidance');
+    expect(allowedRoutingOutcomes('yellow', 'low')).not.toContain('self_care_guidance');
+    expect(allowedRoutingOutcomes('orange', 'high')).toContain('primary_care_24h');
+    expect(allowedRoutingOutcomes('orange', 'low')).not.toContain('primary_care_24h');
+  });
+
+  /**
+   * Orange is the top of the self-transport band, not a softer red. An orange
+   * case that genuinely needs an ambulance should have been scored red, so
+   * offering one here would let a mis-scored case reach dispatch.
+   */
+  it('never offers ambulance dispatch on orange', () => {
+    for (const confidence of ['low', 'medium', 'high'] as const) {
+      expect(allowedRoutingOutcomes('orange', confidence)).not.toContain('ambulance_dispatch');
+    }
+    expect(allowedRoutingOutcomes('red', 'high')).toContain('ambulance_dispatch');
   });
 
   it('always leaves escalation available — refusing to guess is never wrong', () => {

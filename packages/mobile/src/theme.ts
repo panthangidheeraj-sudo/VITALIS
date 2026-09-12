@@ -28,6 +28,13 @@ export const colors = {
   warning: '#D97706',
   warningSoft: '#FEF3C7',
 
+  // Orange sits between warning and danger and must be distinguishable from
+  // BOTH at a glance, in sunlight, on a cheap screen. #EA580C is far enough
+  // from #D97706 (yellow) and #DC2626 (red) in hue and lightness to survive
+  // that; a mid-point that merely "looks orange" next to them would not.
+  urgent: '#EA580C',
+  urgentSoft: '#FFEDD5',
+
   success: '#15803D',
   successSoft: '#DCFCE7',
 } as const;
@@ -35,12 +42,14 @@ export const colors = {
 export const tierColor: Record<RiskTier, string> = {
   green: colors.success,
   yellow: colors.warning,
+  orange: colors.urgent,
   red: colors.danger,
 };
 
 export const tierSurface: Record<RiskTier, string> = {
   green: colors.successSoft,
   yellow: colors.warningSoft,
+  orange: colors.urgentSoft,
   red: colors.dangerSoft,
 };
 
@@ -48,7 +57,21 @@ export const tierSurface: Record<RiskTier, string> = {
 export const tierLabel: Record<RiskTier, string> = {
   green: 'LOW RISK',
   yellow: 'ELEVATED',
+  orange: 'URGENT',
   red: 'CRITICAL',
+};
+
+/**
+ * What the tier means as an ACTION, in the patient's terms. Four colours are
+ * harder to hold in your head than three, and under stress a colour alone
+ * stops being self-explanatory - so every tier ships with the instruction it
+ * implies, not just a severity word.
+ */
+export const tierAction: Record<RiskTier, string> = {
+  green: 'Manage at home',
+  yellow: 'See a doctor soon',
+  orange: 'Be seen today',
+  red: 'Emergency care now',
 };
 
 export const spacing = { xs: 4, sm: 8, md: 12, lg: 16, xl: 24, xxl: 32 } as const;

@@ -26,15 +26,27 @@ export const TRIAGE_LEVELS = [
 ] as const;
 export type TriageLevel = (typeof TRIAGE_LEVELS)[number];
 
-/** The three-tier presentation used everywhere in the UI (§5.1). */
-export const RISK_TIERS = ['green', 'yellow', 'red'] as const;
+/**
+ * The four-tier presentation used everywhere in the UI (5.1).
+ *
+ * ORANGE EXISTS TO SPLIT A TIER THAT WAS DOING TWO JOBS. With three tiers,
+ * `consultation` ("see someone, not urgently") and `consultation_24` ("be seen
+ * within a day") both landed on yellow, so the screen could not distinguish
+ * "book an appointment" from "go now, but you do not need an ambulance". Those
+ * are different actions for the patient and they deserve different colours.
+ *
+ * Orange is therefore NOT a softer red. It is the top of the
+ * self-transport band: urgent, ambulance not indicated.
+ */
+export const RISK_TIERS = ['green', 'yellow', 'orange', 'red'] as const;
 export type RiskTier = (typeof RISK_TIERS)[number];
 
 /** Ordering, so "did risk get worse?" is a comparison and not a pile of ifs. */
 export const RISK_TIER_RANK: Record<RiskTier, number> = {
   green: 0,
   yellow: 1,
-  red: 2,
+  orange: 2,
+  red: 3,
 };
 
 /**

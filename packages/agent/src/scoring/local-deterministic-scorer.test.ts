@@ -66,7 +66,11 @@ describe('LocalDeterministicScorer', () => {
       const result = await scorer.score({ sex: 'female', ageYears: 30, evidence });
       if (result.ok) tiers.push(result.data.tier);
     }
-    expect(tiers).toEqual(['green', 'yellow', 'yellow', 'red', 'red']);
+    // 1 symptom -> consultation (yellow), 2 -> consultation_24 (orange),
+    // 3+ -> emergency (red). The orange step is the whole point of the fourth
+    // tier: "be seen today" is visible as its own state instead of being
+    // flattened into the same colour as "book an appointment".
+    expect(tiers).toEqual(['green', 'yellow', 'orange', 'red', 'red']);
   });
 
   it('agrees with the shared policy on tier-for-level for everything it can return', async () => {

@@ -10,7 +10,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import { activeEvidence } from '@triage/shared';
+import { RISK_TIER_RANK, activeEvidence } from '@triage/shared';
 import type { LexiconEntry } from '../testing/mock-normalization-port.js';
 import { buildTestTools, freshCaseState, type TestHarness } from '../testing/build-tools.js';
 import { confirmRouting } from './confirm-routing.js';
@@ -203,8 +203,11 @@ describe('six-beat scenario, driven through the real orchestrator', () => {
     );
     state = t6.nextState;
 
-    const rank = { green: 0, yellow: 1, red: 2 } as const;
-    expect(rank[state.risk.tier]).toBeGreaterThanOrEqual(rank[tierBeforeFinalSymptom]);
+    // Use the shared ranking rather than a local copy: a local table silently
+    // stops covering the tier set the moment a tier is added.
+    expect(RISK_TIER_RANK[state.risk.tier]).toBeGreaterThanOrEqual(
+      RISK_TIER_RANK[tierBeforeFinalSymptom],
+    );
     expect(state.risk.tier).toBe('red');
     expect(state.risk.source).toBe('infermedica'); // live-like scorer in this test
 

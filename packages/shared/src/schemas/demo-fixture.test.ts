@@ -85,7 +85,7 @@ describe('beat 3–4 — action and intermediate result', () => {
 
   it('reaches yellow before it reaches red', () => {
     const changes = timeline.filter((e) => e.kind === 'risk_tier_changed');
-    expect(changes.map((e) => e.riskTierAfter)).toEqual(['yellow', 'red']);
+    expect(changes.map((e) => e.riskTierAfter)).toEqual(['orange', 'red']);
   });
 });
 
@@ -106,7 +106,7 @@ describe('beat 5 — adaptation (the §5.4 anchor trace)', () => {
 
   it('7:05 — risk upgraded to Red', () => {
     const upgrade = at('07:05').find((e) => e.kind === 'risk_tier_changed');
-    expect(upgrade?.riskTierBefore).toBe('yellow');
+    expect(upgrade?.riskTierBefore).toBe('orange');
     expect(upgrade?.riskTierAfter).toBe('red');
   });
 
