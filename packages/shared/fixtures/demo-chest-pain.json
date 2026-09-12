@@ -1,0 +1,808 @@
+{
+  "_readme": [
+    "The six-beat demo case (spec §11), encoded as real case state.",
+    "",
+    "Beat 1 GOAL                07:00  patient reports chest discomfort",
+    "Beat 2 DECISION            07:00  agent selects its first follow-up question",
+    "Beat 3 ACTION              07:01  infermedica.triage called with accumulated evidence",
+    "Beat 4 INTERMEDIATE RESULT 07:01  Yellow / consultation_24 returned, confidence noted",
+    "Beat 5 ADAPTATION          07:02-07:05  pain spreads to left arm, then shortness of",
+    "                                  breath begins; agent re-plans, re-scores, upgrades to Red",
+    "Beat 6 FINAL OUTCOME       07:05-07:07  ambulance_dispatch behind the 3s press-and-hold",
+    "                                  gate, hospital matched, pre-arrival summary sent",
+    "",
+    "This file is the acceptance test for the contract layer: if the schema cannot",
+    "express the whole judged sequence, the schema is wrong. See demo-fixture.test.ts.",
+    "",
+    "CONCEPT IDS ARE PLACEHOLDERS. They are shaped like real Infermedica ids and",
+    "satisfy the schema, but the actual ids must be reconciled against a live",
+    "/parse response once INFERMEDICA_APP_ID lands. Tracked in README."
+  ],
+
+  "case": {
+    "caseId": "case_demo_chestpain_001",
+    "schemaVersion": 1,
+    "revision": 14,
+
+    "status": "action_taken",
+    "mode": "companion",
+    "language": "en",
+
+    "patientId": "patient_demo_001",
+    "demographics": {
+      "ageYears": 52,
+      "sex": "male",
+      "displayName": "Demo Patient",
+      "preferredLanguage": "en",
+      "isMinor": false
+    },
+    "emergencyCard": {
+      "bloodGroup": "B+",
+      "allergies": ["Penicillin"],
+      "medications": [
+        {
+          "reportedName": "metformin 500",
+          "rxcui": "860975",
+          "normalizedName": "Metformin hydrochloride 500 MG Oral Tablet",
+          "dose": "500 mg",
+          "frequency": "twice daily",
+          "interactionFlags": []
+        }
+      ],
+      "chronicConditions": ["Type 2 diabetes", "Hypertension"],
+      "organDonor": false,
+      "updatedAt": "2026-08-01T10:00:00.000Z"
+    },
+    "vitals": [
+      {
+        "kind": "spo2",
+        "value": 93,
+        "unit": "%",
+        "measuredAt": "2026-09-12T07:04:30.000Z",
+        "source": "manual_entry"
+      },
+      {
+        "kind": "heart_rate",
+        "value": 112,
+        "unit": "bpm",
+        "measuredAt": "2026-09-12T07:04:30.000Z",
+        "source": "manual_entry"
+      }
+    ],
+
+    "evidence": [
+      {
+        "id": "ev_001",
+        "conceptId": "s_21",
+        "conceptType": "symptom",
+        "name": "Chest pain",
+        "commonName": "chest pain",
+        "choiceId": "present",
+        "source": "initial_complaint",
+        "reliability": "reported",
+        "rawText": "I have a heavy feeling in my chest",
+        "turnId": "turn_001",
+        "observedAt": "2026-09-12T07:00:00.000Z",
+        "onsetAt": "2026-09-12T07:00:00.000Z"
+      },
+      {
+        "id": "ev_002",
+        "conceptId": "p_8",
+        "conceptType": "risk_factor",
+        "name": "Smoking",
+        "commonName": "smokes cigarettes",
+        "choiceId": "present",
+        "source": "patient_record",
+        "reliability": "reported",
+        "turnId": "turn_001",
+        "observedAt": "2026-09-12T07:00:10.000Z"
+      },
+      {
+        "id": "ev_003",
+        "conceptId": "s_47",
+        "conceptType": "symptom",
+        "name": "Excessive sweating",
+        "commonName": "sweating a lot",
+        "choiceId": "absent",
+        "source": "question_answer",
+        "reliability": "reported",
+        "rawText": "no, not sweating",
+        "turnId": "turn_002",
+        "observedAt": "2026-09-12T07:00:50.000Z",
+        "supersededBy": "ev_007"
+      },
+      {
+        "id": "ev_004",
+        "conceptId": "s_98",
+        "conceptType": "symptom",
+        "name": "Pain radiating to the left arm",
+        "commonName": "pain spreading to your left arm",
+        "choiceId": "present",
+        "source": "question_answer",
+        "reliability": "reported",
+        "rawText": "now it's going down my left arm",
+        "turnId": "turn_004",
+        "observedAt": "2026-09-12T07:02:00.000Z",
+        "onsetAt": "2026-09-12T07:02:00.000Z"
+      },
+      {
+        "id": "ev_005",
+        "conceptId": "s_13",
+        "conceptType": "symptom",
+        "name": "Dyspnea",
+        "commonName": "shortness of breath",
+        "choiceId": "present",
+        "source": "question_answer",
+        "reliability": "reported",
+        "rawText": "i cant breathe properly",
+        "turnId": "turn_006",
+        "observedAt": "2026-09-12T07:04:00.000Z",
+        "onsetAt": "2026-09-12T07:04:00.000Z",
+        "supersedes": "ev_006"
+      },
+      {
+        "id": "ev_006",
+        "conceptId": "s_13",
+        "conceptType": "symptom",
+        "name": "Dyspnea",
+        "commonName": "shortness of breath",
+        "choiceId": "absent",
+        "source": "question_answer",
+        "reliability": "disputed",
+        "rawText": "no im fine breathing",
+        "turnId": "turn_003",
+        "observedAt": "2026-09-12T07:01:30.000Z",
+        "supersededBy": "ev_005"
+      },
+      {
+        "id": "ev_007",
+        "conceptId": "s_47",
+        "conceptType": "symptom",
+        "name": "Excessive sweating",
+        "commonName": "sweating a lot",
+        "choiceId": "present",
+        "source": "caregiver_report",
+        "reliability": "measured",
+        "rawText": "he is drenched in sweat",
+        "turnId": "turn_005",
+        "observedAt": "2026-09-12T07:03:10.000Z",
+        "supersedes": "ev_003"
+      }
+    ],
+
+    "risk": {
+      "tier": "red",
+      "triageLevel": "emergency_ambulance",
+      "rootCause": "serious_evidence_present",
+      "seriousFlags": [
+        {
+          "id": "s_98",
+          "name": "Pain radiating to the left arm",
+          "commonName": "pain spreading to your left arm",
+          "seriousness": "emergency",
+          "isEmergency": true
+        },
+        {
+          "id": "s_13",
+          "name": "Dyspnea",
+          "commonName": "shortness of breath",
+          "seriousness": "serious",
+          "isEmergency": false
+        }
+      ],
+      "triageTuples": [
+        {
+          "conceptIds": ["s_21", "s_98"],
+          "label": "Chest pain with radiation to the left arm",
+          "citation": {
+            "provider": "infermedica",
+            "title": "Infermedica triage tuple: chest pain + left-arm radiation",
+            "retrievedAt": "2026-09-12T07:05:00.000Z"
+          }
+        }
+      ],
+      "teleconsultationApplicable": false,
+      "source": "infermedica",
+      "evidenceCount": 5,
+      "computedAt": "2026-09-12T07:05:00.000Z"
+    },
+
+    "confidence": {
+      "score": 0.86,
+      "level": "high",
+      "reasons": [
+        {
+          "code": "corroborated_by_measurement",
+          "delta": 0.2,
+          "note": "SpO2 93% and HR 112 bpm are consistent with the reported dyspnea."
+        },
+        {
+          "code": "self_contradiction",
+          "delta": -0.25,
+          "note": "Patient denied breathing difficulty at 07:01 and reported it at 07:04."
+        },
+        {
+          "code": "consistent_across_turns",
+          "delta": 0.15,
+          "note": "Chest pain reported consistently across all six turns."
+        }
+      ],
+      "contradictions": [
+        {
+          "kind": "cross_turn_reversal",
+          "detail": "Dyspnea answered 'absent' at 07:01:30 and 'present' at 07:04:00.",
+          "conflictingEvidenceIds": ["ev_006", "ev_005"],
+          "priorTurnId": "turn_003",
+          "currentTurnId": "turn_006",
+          "detectedAt": "2026-09-12T07:04:05.000Z",
+          "resolvedAt": "2026-09-12T07:04:40.000Z",
+          "resolutionNote": "Re-questioned with hard-to-deflect phrasing. Patient confirmed breathing worsened after 07:02; not a reporting error but genuine progression. Later reading supersedes the earlier one."
+        },
+        {
+          "kind": "self_report_vs_evidence",
+          "detail": "Patient stated 'no, not sweating' at 07:00:50; caregiver reported visible heavy sweating at 07:03:10.",
+          "conflictingEvidenceIds": ["ev_003", "ev_007"],
+          "priorTurnId": "turn_002",
+          "currentTurnId": "turn_005",
+          "detectedAt": "2026-09-12T07:03:15.000Z",
+          "resolvedAt": "2026-09-12T07:03:45.000Z",
+          "resolutionNote": "Caregiver observation is a direct observation and outranks the self-report. Under-reporting consistent with the 'terse' communication state read on turns 2-3."
+        }
+      ],
+      "alertActive": false,
+      "alertRaisedAt": "2026-09-12T07:03:15.000Z",
+      "updatedAt": "2026-09-12T07:05:00.000Z"
+    },
+
+    "communication": {
+      "state": "terse",
+      "certainty": 0.78,
+      "signals": ["very_short_answers", "self_contradiction", "sentence_fragments"],
+      "detectedLanguage": "en",
+      "since": "2026-09-12T07:00:50.000Z",
+      "updatedAt": "2026-09-12T07:05:00.000Z"
+    },
+
+    "lastTurnId": "turn_007",
+    "turnCount": 7,
+
+    "routing": {
+      "outcome": "ambulance_dispatch",
+      "rationale": "Chest pain radiating to the left arm with new shortness of breath, sweating observed by a caregiver, SpO2 93% and HR 112. The clinical scoring engine returned emergency_ambulance. Information confidence is high after both contradictions were resolved.",
+      "policyRule": "baseOutcomeByTriageLevel",
+      "gate": {
+        "kind": "press_and_hold_3s",
+        "state": "satisfied",
+        "consequenceStatement": "This will request an ambulance and share your live location with emergency contacts. Hold the button for 3 seconds to confirm.",
+        "requiredHoldMs": 3000,
+        "satisfiedAt": "2026-09-12T07:05:28.000Z"
+      },
+      "proposedAt": "2026-09-12T07:05:02.000Z",
+      "confirmedAt": "2026-09-12T07:05:28.000Z",
+      "basedOnRiskComputedAt": "2026-09-12T07:05:00.000Z"
+    },
+
+    "dispatch": {
+      "status": "en_route",
+      "simulated": true,
+      "requestedAt": "2026-09-12T07:05:30.000Z",
+      "etaMinutes": 9,
+      "contactNumber": "+911234567890",
+      "unitLabel": "AMB-14"
+    },
+
+    "hospital": {
+      "hospital": {
+        "osmId": "node/240958722",
+        "name": "AIIMS Bhubaneswar",
+        "location": { "lat": 20.2384, "lng": 85.7772 },
+        "address": "Sijua, Patrapada, Bhubaneswar, Odisha 751019",
+        "phone": "+916742476789",
+        "isPublic": true,
+        "specialties": ["emergency", "cardiology", "general_medicine", "trauma"],
+        "bedAvailability": {
+          "simulated": true,
+          "emergencyBedsFree": 4,
+          "icuBedsFree": 2,
+          "totalEmergencyBeds": 30,
+          "lastUpdated": "2026-09-12T07:05:40.000Z"
+        },
+        "hasEmergencyDepartment": true,
+        "dataProvenance": {
+          "location": "openstreetmap",
+          "specialties": "simulated",
+          "bedAvailability": "simulated"
+        }
+      },
+      "distanceKm": 6.4,
+      "estimatedTravelMinutes": 14,
+      "requiredSpecialty": "cardiology",
+      "specialtyMatched": true,
+      "matchRationale": "Nearest facility with both an emergency department and cardiology cover, with free emergency beds. Two closer hospitals lack cardiology.",
+      "matchedAt": "2026-09-12T07:05:45.000Z"
+    },
+
+    "preArrival": {
+      "caseId": "case_demo_chestpain_001",
+      "sentAt": "2026-09-12T07:06:02.000Z",
+      "destinationOsmId": "node/240958722",
+      "etaMinutes": 14,
+      "simulated": true,
+      "acknowledged": true,
+      "acknowledgedAt": "2026-09-12T07:06:20.000Z"
+    },
+
+    "relay": {
+      "active": true,
+      "relayContactId": "contact_001",
+      "requestedAt": "2026-09-12T07:03:00.000Z",
+      "acceptedAt": "2026-09-12T07:03:08.000Z",
+      "reason": "patient_requested",
+      "silenceSeconds": 0
+    },
+
+    "companion": {
+      "active": true,
+      "intervalMs": 180000,
+      "lastReassessedAt": "2026-09-12T07:07:00.000Z",
+      "nextReassessmentDueAt": "2026-09-12T07:10:00.000Z",
+      "reassessmentCount": 1,
+      "trends": {
+        "breathing": "worsening",
+        "consciousness": "stable",
+        "bleeding": "stable"
+      },
+      "activeFirstAidTopic": "chest-pain-positioning-and-aspirin-check"
+    },
+
+    "escalation": { "escalated": false },
+
+    "degradation": {
+      "clinicalScoringDegraded": false,
+      "affectedTools": ["medlineplus.explain"]
+    },
+
+    "notifications": [
+      {
+        "contactId": "contact_001",
+        "channel": "whatsapp",
+        "kind": "emergency_alert",
+        "status": "delivered",
+        "body": "Emergency alert: chest pain with left-arm radiation and breathing difficulty. Ambulance requested 07:05. Destination: AIIMS Bhubaneswar. Live location attached.",
+        "sharedLocation": { "lat": 20.2961, "lng": 85.8245, "accuracyM": 18 },
+        "providerMessageId": "SM_demo_0001",
+        "queuedAt": "2026-09-12T07:05:31.000Z",
+        "sentAt": "2026-09-12T07:05:32.000Z",
+        "deliveredAt": "2026-09-12T07:05:35.000Z"
+      },
+      {
+        "contactId": "contact_002",
+        "channel": "sms",
+        "kind": "location_share",
+        "status": "failed",
+        "body": "Live location share for an active emergency case.",
+        "providerMessageId": "SM_demo_0002",
+        "failureReason": "Unverified recipient on Twilio trial account.",
+        "queuedAt": "2026-09-12T07:05:31.000Z"
+      }
+    ],
+
+    "lastKnownLocation": {
+      "lat": 20.2961,
+      "lng": 85.8245,
+      "accuracyM": 18,
+      "at": "2026-09-12T07:05:29.000Z",
+      "source": "browser_geolocation"
+    },
+
+    "createdAt": "2026-09-12T07:00:00.000Z",
+    "updatedAt": "2026-09-12T07:07:00.000Z"
+  },
+
+  "timeline": [
+    {
+      "id": "tl_001",
+      "kind": "case_opened",
+      "provenance": "system_event",
+      "summary": "Case opened — chest discomfort reported",
+      "quotedText": "I have a heavy feeling in my chest",
+      "riskTierAfter": "green",
+      "turnId": "turn_001",
+      "at": "2026-09-12T07:00:00.000Z",
+      "recordedAt": "2026-09-12T07:00:00.000Z"
+    },
+    {
+      "id": "tl_002",
+      "kind": "symptom_reported",
+      "provenance": "reported",
+      "summary": "Chest pain starts",
+      "detail": "Described as heaviness. Onset 07:00.",
+      "quotedText": "I have a heavy feeling in my chest",
+      "riskTierAfter": "green",
+      "turnId": "turn_001",
+      "at": "2026-09-12T07:00:00.000Z",
+      "recordedAt": "2026-09-12T07:00:02.000Z"
+    },
+    {
+      "id": "tl_003",
+      "kind": "question_asked",
+      "provenance": "agent_inference",
+      "summary": "Asked whether the pain spreads anywhere else",
+      "detail": "Selected over 'rate the pain 1-10' — radiation is the higher-information discriminator for cardiac versus musculoskeletal chest pain.",
+      "turnId": "turn_002",
+      "toolCallId": "tc_002",
+      "at": "2026-09-12T07:00:30.000Z",
+      "recordedAt": "2026-09-12T07:00:30.000Z"
+    },
+    {
+      "id": "tl_004",
+      "kind": "risk_scored",
+      "provenance": "tool_output",
+      "summary": "Clinical scoring engine returned consultation_24",
+      "detail": "2 active evidence items. Yellow tier. Confidence medium — answers are terse.",
+      "riskTierBefore": "green",
+      "riskTierAfter": "yellow",
+      "turnId": "turn_002",
+      "toolCallId": "tc_003",
+      "at": "2026-09-12T07:01:00.000Z",
+      "recordedAt": "2026-09-12T07:01:00.000Z"
+    },
+    {
+      "id": "tl_005",
+      "kind": "risk_tier_changed",
+      "provenance": "tool_output",
+      "summary": "Risk tier Green → Yellow",
+      "riskTierBefore": "green",
+      "riskTierAfter": "yellow",
+      "turnId": "turn_002",
+      "toolCallId": "tc_003",
+      "at": "2026-09-12T07:01:00.000Z",
+      "recordedAt": "2026-09-12T07:01:01.000Z"
+    },
+    {
+      "id": "tl_006",
+      "kind": "symptom_progressed",
+      "provenance": "reported",
+      "summary": "Pain spreads to left arm",
+      "quotedText": "now it's going down my left arm",
+      "riskTierAfter": "yellow",
+      "turnId": "turn_004",
+      "at": "2026-09-12T07:02:00.000Z",
+      "recordedAt": "2026-09-12T07:02:03.000Z"
+    },
+    {
+      "id": "tl_007",
+      "kind": "adaptation",
+      "provenance": "agent_inference",
+      "summary": "Re-planned: new symptom outranks the queued question",
+      "detail": "Planned action was ask_question (pain duration). Revised to score_now — left-arm radiation materially changes the triage tuple and must be scored before any further questioning.",
+      "riskTierAfter": "yellow",
+      "turnId": "turn_004",
+      "at": "2026-09-12T07:02:05.000Z",
+      "recordedAt": "2026-09-12T07:02:05.000Z"
+    },
+    {
+      "id": "tl_008",
+      "kind": "confidence_alert_raised",
+      "provenance": "agent_inference",
+      "summary": "Confidence alert — self-report contradicted by caregiver observation",
+      "detail": "Patient said 'no, not sweating' at 07:00:50. Caregiver reports heavy sweating at 07:03:10. Routing is blocked until this resolves.",
+      "riskTierAfter": "yellow",
+      "turnId": "turn_005",
+      "at": "2026-09-12T07:03:15.000Z",
+      "recordedAt": "2026-09-12T07:03:15.000Z"
+    },
+    {
+      "id": "tl_009",
+      "kind": "confidence_alert_cleared",
+      "provenance": "agent_inference",
+      "summary": "Contradiction resolved — direct observation outranks self-report",
+      "detail": "Under-reporting consistent with the terse communication state. Sweating recorded as present.",
+      "riskTierAfter": "yellow",
+      "turnId": "turn_005",
+      "at": "2026-09-12T07:03:45.000Z",
+      "recordedAt": "2026-09-12T07:03:45.000Z"
+    },
+    {
+      "id": "tl_010",
+      "kind": "symptom_reported",
+      "provenance": "reported",
+      "summary": "Shortness of breath begins",
+      "quotedText": "i cant breathe properly",
+      "riskTierAfter": "yellow",
+      "turnId": "turn_006",
+      "at": "2026-09-12T07:04:00.000Z",
+      "recordedAt": "2026-09-12T07:04:02.000Z"
+    },
+    {
+      "id": "tl_011",
+      "kind": "vital_recorded",
+      "provenance": "reported",
+      "summary": "SpO2 93%, HR 112 bpm",
+      "detail": "Corroborates the reported dyspnea; raises information confidence.",
+      "riskTierAfter": "yellow",
+      "turnId": "turn_006",
+      "at": "2026-09-12T07:04:30.000Z",
+      "recordedAt": "2026-09-12T07:04:30.000Z"
+    },
+    {
+      "id": "tl_012",
+      "kind": "tool_degraded",
+      "provenance": "system_event",
+      "summary": "MedlinePlus unavailable — explanation text omitted, scoring unaffected",
+      "detail": "Knowledge lookup for 'dyspnea' timed out. The clinical scoring engine is unaffected and the risk tier is unchanged.",
+      "riskTierAfter": "yellow",
+      "turnId": "turn_006",
+      "toolCallId": "tc_008",
+      "at": "2026-09-12T07:04:35.000Z",
+      "recordedAt": "2026-09-12T07:04:35.000Z"
+    },
+    {
+      "id": "tl_013",
+      "kind": "risk_tier_changed",
+      "provenance": "tool_output",
+      "summary": "Risk upgraded to Red",
+      "detail": "emergency_ambulance returned. Triage tuple fired: chest pain + left-arm radiation. 5 active evidence items.",
+      "riskTierBefore": "yellow",
+      "riskTierAfter": "red",
+      "turnId": "turn_006",
+      "toolCallId": "tc_009",
+      "at": "2026-09-12T07:05:00.000Z",
+      "recordedAt": "2026-09-12T07:05:00.000Z"
+    },
+    {
+      "id": "tl_014",
+      "kind": "routing_proposed",
+      "provenance": "agent_inference",
+      "summary": "Proposed: emergency ambulance — awaiting 3-second hold",
+      "detail": "Verified against policy: outcome permitted for red tier at high confidence; gate press_and_hold_3s required.",
+      "riskTierAfter": "red",
+      "turnId": "turn_007",
+      "at": "2026-09-12T07:05:02.000Z",
+      "recordedAt": "2026-09-12T07:05:02.000Z"
+    },
+    {
+      "id": "tl_015",
+      "kind": "routing_confirmed",
+      "provenance": "system_event",
+      "summary": "Confirmed by 3-second press-and-hold",
+      "riskTierAfter": "red",
+      "turnId": "turn_007",
+      "at": "2026-09-12T07:05:28.000Z",
+      "recordedAt": "2026-09-12T07:05:28.000Z"
+    },
+    {
+      "id": "tl_016",
+      "kind": "dispatch_requested",
+      "provenance": "system_event",
+      "summary": "Ambulance requested (simulated) — AMB-14, ETA 9 min",
+      "riskTierAfter": "red",
+      "at": "2026-09-12T07:05:30.000Z",
+      "recordedAt": "2026-09-12T07:05:30.000Z"
+    },
+    {
+      "id": "tl_017",
+      "kind": "contacts_notified",
+      "provenance": "system_event",
+      "summary": "1 contact notified via WhatsApp; 1 SMS failed (unverified trial number)",
+      "riskTierAfter": "red",
+      "toolCallId": "tc_011",
+      "at": "2026-09-12T07:05:35.000Z",
+      "recordedAt": "2026-09-12T07:05:35.000Z"
+    },
+    {
+      "id": "tl_018",
+      "kind": "hospital_matched",
+      "provenance": "tool_output",
+      "summary": "AIIMS Bhubaneswar — 6.4 km, cardiology available, 4 emergency beds free",
+      "riskTierAfter": "red",
+      "toolCallId": "tc_012",
+      "at": "2026-09-12T07:05:45.000Z",
+      "recordedAt": "2026-09-12T07:05:45.000Z"
+    },
+    {
+      "id": "tl_019",
+      "kind": "prearrival_summary_sent",
+      "provenance": "system_event",
+      "summary": "Pre-arrival summary sent and acknowledged",
+      "riskTierAfter": "red",
+      "toolCallId": "tc_013",
+      "at": "2026-09-12T07:06:02.000Z",
+      "recordedAt": "2026-09-12T07:06:02.000Z"
+    },
+    {
+      "id": "tl_020",
+      "kind": "companion_reassessment",
+      "provenance": "agent_inference",
+      "summary": "Reassessment 1 — breathing worsening, consciousness stable",
+      "detail": "First-aid guidance surfaced: seated upright position, aspirin contraindication check against recorded allergies.",
+      "riskTierAfter": "red",
+      "at": "2026-09-12T07:07:00.000Z",
+      "recordedAt": "2026-09-12T07:07:00.000Z"
+    }
+  ],
+
+  "toolCalls": [
+    {
+      "id": "tc_001",
+      "tool": "infermedica.parse",
+      "role": "normalization",
+      "status": "succeeded",
+      "turnId": "turn_001",
+      "phase": "observe",
+      "argsDigest": "text(34 chars), age=52, sex=male",
+      "resultDigest": "1 mention: s_21 chest pain [present]",
+      "latencyMs": 312,
+      "attempts": 1,
+      "startedAt": "2026-09-12T07:00:01.000Z",
+      "completedAt": "2026-09-12T07:00:01.312Z"
+    },
+    {
+      "id": "tc_002",
+      "tool": "groq.select_next_question",
+      "role": "reasoning",
+      "status": "succeeded",
+      "turnId": "turn_002",
+      "phase": "decide",
+      "argsDigest": "evidence=2, candidates=[s_98,s_13,s_47], hardToDeflect=false",
+      "resultDigest": "target=s_98, expectedInformationGain=0.72",
+      "latencyMs": 486,
+      "attempts": 1,
+      "startedAt": "2026-09-12T07:00:29.000Z",
+      "completedAt": "2026-09-12T07:00:29.486Z"
+    },
+    {
+      "id": "tc_003",
+      "tool": "infermedica.triage",
+      "role": "clinical_scoring",
+      "status": "succeeded",
+      "turnId": "turn_002",
+      "phase": "act",
+      "argsDigest": "sex=male, age=52, evidence=2",
+      "resultDigest": "triage_level=consultation_24, serious=0, tier=yellow",
+      "latencyMs": 641,
+      "attempts": 1,
+      "startedAt": "2026-09-12T07:00:59.000Z",
+      "completedAt": "2026-09-12T07:00:59.641Z"
+    },
+    {
+      "id": "tc_004",
+      "tool": "groq.read_communication_state",
+      "role": "reasoning",
+      "status": "succeeded",
+      "turnId": "turn_003",
+      "phase": "evaluate",
+      "argsDigest": "recentInputs=3",
+      "resultDigest": "state=terse, certainty=0.78",
+      "latencyMs": 254,
+      "attempts": 1,
+      "startedAt": "2026-09-12T07:01:31.000Z",
+      "completedAt": "2026-09-12T07:01:31.254Z"
+    },
+    {
+      "id": "tc_005",
+      "tool": "infermedica.parse",
+      "role": "normalization",
+      "status": "succeeded",
+      "turnId": "turn_004",
+      "phase": "observe",
+      "argsDigest": "text(28 chars), context=[s_21,p_8]",
+      "resultDigest": "1 mention: s_98 pain radiating to left arm [present]",
+      "latencyMs": 298,
+      "attempts": 1,
+      "startedAt": "2026-09-12T07:02:01.000Z",
+      "completedAt": "2026-09-12T07:02:01.298Z"
+    },
+    {
+      "id": "tc_006",
+      "tool": "groq.detect_contradiction",
+      "role": "reasoning",
+      "status": "succeeded",
+      "turnId": "turn_005",
+      "phase": "evaluate",
+      "argsDigest": "newEvidence=1 (s_47 present, caregiver), priorEvidence=5",
+      "resultDigest": "1 contradiction: self_report_vs_evidence, certainty=0.88",
+      "latencyMs": 512,
+      "attempts": 1,
+      "startedAt": "2026-09-12T07:03:14.000Z",
+      "completedAt": "2026-09-12T07:03:14.512Z"
+    },
+    {
+      "id": "tc_007",
+      "tool": "groq.select_next_question",
+      "role": "reasoning",
+      "status": "succeeded",
+      "turnId": "turn_005",
+      "phase": "adapt",
+      "argsDigest": "hardToDeflect=true (confidence alert active)",
+      "resultDigest": "target=s_47, hardToDeflect=true, expectedInformationGain=0.81",
+      "latencyMs": 447,
+      "attempts": 1,
+      "startedAt": "2026-09-12T07:03:20.000Z",
+      "completedAt": "2026-09-12T07:03:20.447Z"
+    },
+    {
+      "id": "tc_008",
+      "tool": "medlineplus.explain",
+      "role": "knowledge",
+      "status": "timed_out",
+      "turnId": "turn_006",
+      "phase": "evaluate",
+      "argsDigest": "concept=dyspnea",
+      "latencyMs": 4000,
+      "attempts": 2,
+      "errorMessage": "Request exceeded the 4000 ms per-attempt ceiling.",
+      "degradationNotice": "Reference lookup unavailable, so I can't cite a source for this one. The risk assessment itself is unaffected.",
+      "startedAt": "2026-09-12T07:04:31.000Z",
+      "completedAt": "2026-09-12T07:04:35.000Z"
+    },
+    {
+      "id": "tc_009",
+      "tool": "infermedica.triage",
+      "role": "clinical_scoring",
+      "status": "succeeded",
+      "turnId": "turn_006",
+      "phase": "act",
+      "argsDigest": "sex=male, age=52, evidence=5",
+      "resultDigest": "triage_level=emergency_ambulance, serious=2, tuples=1, tier=red",
+      "latencyMs": 703,
+      "attempts": 1,
+      "startedAt": "2026-09-12T07:04:59.000Z",
+      "completedAt": "2026-09-12T07:04:59.703Z"
+    },
+    {
+      "id": "tc_010",
+      "tool": "icd11.code",
+      "role": "coding",
+      "status": "succeeded",
+      "turnId": "turn_007",
+      "phase": "evaluate",
+      "argsDigest": "chiefComplaint='chest pain radiating to left arm', triageLevel=emergency_ambulance",
+      "resultDigest": "MD30.0 Chest pain",
+      "latencyMs": 389,
+      "attempts": 1,
+      "startedAt": "2026-09-12T07:05:03.000Z",
+      "completedAt": "2026-09-12T07:05:03.389Z"
+    },
+    {
+      "id": "tc_011",
+      "tool": "twilio.send_message",
+      "role": "notification",
+      "status": "succeeded_degraded",
+      "phase": "act",
+      "argsDigest": "2 contacts: 1 whatsapp, 1 sms",
+      "resultDigest": "1 delivered, 1 failed",
+      "latencyMs": 1204,
+      "attempts": 1,
+      "degradationNotice": "One emergency contact could not be reached by SMS — the number is not verified on the trial account. WhatsApp delivery succeeded for the primary contact.",
+      "startedAt": "2026-09-12T07:05:31.000Z",
+      "completedAt": "2026-09-12T07:05:32.204Z"
+    },
+    {
+      "id": "tc_012",
+      "tool": "osm.find_hospitals",
+      "role": "logistics",
+      "status": "succeeded",
+      "phase": "act",
+      "argsDigest": "origin=20.2961,85.8245, radius=15km, specialty=cardiology",
+      "resultDigest": "7 hospitals, 3 with cardiology, best=node/240958722",
+      "latencyMs": 1876,
+      "attempts": 1,
+      "startedAt": "2026-09-12T07:05:43.000Z",
+      "completedAt": "2026-09-12T07:05:44.876Z"
+    },
+    {
+      "id": "tc_013",
+      "tool": "hospital.push_prearrival",
+      "role": "logistics",
+      "status": "succeeded",
+      "phase": "act",
+      "argsDigest": "destination=node/240958722, payload=handoff card",
+      "resultDigest": "acknowledged=true",
+      "latencyMs": 402,
+      "attempts": 1,
+      "startedAt": "2026-09-12T07:06:01.000Z",
+      "completedAt": "2026-09-12T07:06:01.402Z"
+    }
+  ]
+}

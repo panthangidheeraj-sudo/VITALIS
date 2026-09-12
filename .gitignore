@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment / secrets — NEVER commit
+.env
+.env.local
+.env.*.local
+*-service-account*.json
+*firebase-adminsdk*.json
+serviceAccountKey.json
+
+# Firebase local
+.firebase/
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
+
+# Logs
+*.log
+npm-debug.log*
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings — machine-specific, not project config
+.claude/settings.local.json
+
+# Test / coverage
+coverage/
+.vitest/
+
+# Vite
+packages/web/dist/
+packages/web/dev-dist/

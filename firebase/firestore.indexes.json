@@ -1,0 +1,20 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "timeline",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "at", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "toolCalls",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "startedAt", "order": "DESCENDING" }]
+    },
+    {
+      "collectionGroup": "turns",
+      "queryScope": "COLLECTION",
+      "fields": [{ "fieldPath": "index", "order": "ASCENDING" }]
+    }
+  ],
+  "fieldOverrides": []
+}

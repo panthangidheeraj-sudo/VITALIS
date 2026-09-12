@@ -1,0 +1,88 @@
+rules_version = '2';
+
+// Adaptive Emergency Triage Agent — Firestore security rules.
+//
+// SHAPE OF THE TRUST MODEL (spec §3.1):
+//   The frontend holds no API keys and performs no orchestration. It READS case
+//   state live and WRITES nothing clinical. Every mutation that matters — new
+//   evidence, a risk score, a routing decision, a timeline entry, a tool-call
+//   record — is written by the server using the Admin SDK, which bypasses these
+//   rules entirely.
+//
+//   So these rules exist to constrain the BROWSER, and the browser's only jobs
+//   are: read your own case, and raise your hand (the two request flags below).
+//   Everything else is denied by default.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function ownsCase(caseData) {
+      // Anonymous Auth gives each device a stable uid at no cost on the free
+      // Spark plan. A case is readable by its owner and by any contact the
+      // server has explicitly listed as a relay participant (§5.5).
+      return isSignedIn() && (
+        caseData.ownerUid == request.auth.uid ||
+        request.auth.uid in caseData.get('relayUids', [])
+      );
+    }
+
+    // --- Cases -------------------------------------------------------------
+    match /cases/{caseId} {
+      allow read: if ownsCase(resource.data);
+
+      // The browser never creates or deletes a case; the server does, so that
+      // a case always starts with a validated initial state.
+      allow create, delete: if false;
+
+      // The ONLY client-side writes permitted are the two user intents that
+      // cannot originate anywhere else: satisfying a safety gate, and
+      // cancelling an alert. Both are recorded as *requests*; the server
+      // observes them, re-runs the policy, and writes the actual decision.
+      // This keeps the press-and-hold gate honest — the client cannot simply
+      // assert `confirmedAt` and skip it.
+      allow update: if ownsCase(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['gateHoldRequest', 'cancelRequest', 'updatedAt']);
+
+      // --- Subcollections: read-only to the client -------------------------
+      match /timeline/{entryId} {
+        allow read: if ownsCase(get(/databases/$(database)/documents/cases/$(caseId)).data);
+        allow write: if false;
+      }
+
+      match /toolCalls/{callId} {
+        allow read: if ownsCase(get(/databases/$(database)/documents/cases/$(caseId)).data);
+        allow write: if false;
+      }
+
+      match /turns/{turnId} {
+        allow read: if ownsCase(get(/databases/$(database)/documents/cases/$(caseId)).data);
+        allow write: if false;
+      }
+    }
+
+    // --- Patient profiles ---------------------------------------------------
+    // The One-Tap Emergency Card is the patient's own data: they may edit it.
+    match /patients/{patientId} {
+      allow read, write: if isSignedIn() && resource.data.ownerUid == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+    }
+
+    // --- Hospital overlay ---------------------------------------------------
+    // Simulated specialty + bed data. Public read so the map renders; writes
+    // are seeded by the server only.
+    match /hospitals/{osmId} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // Anything not matched above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
