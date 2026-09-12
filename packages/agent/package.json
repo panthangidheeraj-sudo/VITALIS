@@ -1,0 +1,22 @@
+{
+  "name": "@triage/agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "The Observe-Decide-Act-Evaluate-Adapt orchestration loop, against the tool ports defined in @triage/shared.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --build"
+  },
+  "dependencies": {
+    "@triage/shared": "*"
+  }
+}

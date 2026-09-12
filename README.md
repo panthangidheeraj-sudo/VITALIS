@@ -17,8 +17,8 @@ autonomously diagnoses or prescribes.
 | Slice | State |
 |---|---|
 | `packages/shared` — contracts, case-state model, tool ports, routing policy, schemas | **Done.** Typechecks clean, 81 tests passing. |
-| `packages/agent` — the Observe→Decide→Act→Evaluate→Adapt loop | Next |
-| `packages/server` — Express orchestrator, real API adapters | After agent |
+| `packages/agent` — the Observe→Decide→Act→Evaluate→Adapt loop | **Done.** Typechecks clean, 39 tests passing (120 total across the workspace). Runs end-to-end with zero API keys, against a deterministic local scorer and mock Groq/Infermedica/hospital adapters. |
+| `packages/server` — Express orchestrator, real API adapters | Next |
 | `packages/web` — React + Vite PWA, 3-screen flow | After server |
 
 ```bash
@@ -64,6 +64,41 @@ Every turn produces all three, together (`TurnReadout`):
 
 Tracking risk and confidence *separately* is the headline idea. A low-confidence
 Green is not a green light — it is a reason to ask harder questions.
+
+### The agent loop (`packages/agent`)
+
+`orchestrateTurn(state, input, tools)` is the whole Observe→Decide→Act→Evaluate→Adapt
+cycle as one pure(ish) function: given a case state, one piece of input, and
+the tool ports from `@triage/shared`, it returns the updated state, the turn
+record, the timeline entries it produced, and the tool-call ledger. It never
+touches a store directly — `run-turn.ts` wraps it with the revision-checked
+Firestore write, so a Companion Mode tick and a live answer landing at the
+same moment can't silently clobber each other.
+
+Two design decisions worth knowing about before touching this code:
+
+- **Contradiction resolution requires an independent second source.** A
+  contradiction is created from two disagreeing evidence items; if resolving
+  it only needed one of those same two items, the agent would settle a
+  dispute using the very evidence that raised it. So `resolveContradictions`
+  only closes a contradiction when a THIRD, independent item touching the
+  same concept arrives later — exactly the "ask harder-to-deflect follow-ups"
+  behavior §5.1 requires, not just a label on top of accepting the flip at
+  face value. `orchestrator.test.ts` has a named regression test for this.
+- **Post-confirmation action is a separate function.** `orchestrateTurn`
+  only ever *proposes* a routing decision; `confirmRouting` is what runs
+  hospital matching, the pre-arrival push, and dispatch, and it refuses to
+  run at all unless the safety gate's `state` is already `'satisfied'`. This
+  keeps "decide" and "act on a confirmed decision" as two distinct,
+  separately-testable steps, matching the press-and-hold requirement in §5.2.
+
+Everything is testable with zero API keys: `packages/agent/src/testing/`
+provides a deterministic clock, an in-memory Firestore-shaped store, and
+keyword-lexicon stand-ins for Groq and Infermedica. `LocalDeterministicScorer`
+(the real §6 fallback engine, not just a test double) is deterministic by
+design, so the whole loop — including a full contradiction → adaptation →
+escalation walkthrough — runs and is asserted on in CI without touching the
+network.
 
 ### Two invariants the code enforces structurally
 
