@@ -374,6 +374,12 @@ export const caseStateSchema = z
     schemaVersion: z.literal(1),
     revision: z.number().int().nonnegative(),
 
+    // Non-empty, because "" would pass a bare string check and then fail the
+    // security rule at read time, which is the failure this field exists to
+    // prevent.
+    ownerUid: z.string().min(1),
+    relayUids: z.array(z.string().min(1)).optional(),
+
     status: z.enum([
       'interviewing',
       'awaiting_confirmation',

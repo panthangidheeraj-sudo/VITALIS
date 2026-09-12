@@ -6,7 +6,7 @@
  */
 
 import type { AgentTools, BiologicalSex, CaseState, Language } from '@triage/shared';
-import { asCaseId } from '@triage/shared';
+import { asCaseId, asUid } from '@triage/shared';
 import { LocalDeterministicScorer } from '../scoring/local-deterministic-scorer.js';
 import { InMemoryCaseStore } from './in-memory-store.js';
 import { ManualClock } from './manual-clock.js';
@@ -56,6 +56,7 @@ export function freshCaseState(
     caseId: asCaseId('case_test_1'),
     schemaVersion: 1,
     revision: 0,
+    ownerUid: asUid('uid_test_owner'),
     status: 'interviewing',
     mode: 'patient',
     language: overrides.language ?? 'en',

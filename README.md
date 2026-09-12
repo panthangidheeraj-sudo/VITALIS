@@ -18,7 +18,7 @@ autonomously diagnoses or prescribes.
 |---|---|
 | `packages/shared` — contracts, case-state model, tool ports, routing policy, schemas | **Done.** 81 tests passing. |
 | `packages/agent` — the Observe→Decide→Act→Evaluate→Adapt loop | **Done.** 39 tests passing. Runs end-to-end with zero API keys. |
-| `packages/server` — Express orchestrator, Firestore adapter | **Done.** 11 tests passing (131 total). Four endpoints wrapping the agent loop; real external adapters slot in behind the existing ports as credentials arrive. |
+| `packages/server` — Express orchestrator, Firestore adapter | **Done.** 13 tests passing (133 total). Four endpoints wrapping the agent loop; real external adapters slot in behind the existing ports as credentials arrive. |
 | `packages/mobile` — **React Native (Expo) app, Android + iOS** | **Done.** Typechecks clean and bundles for both platforms. Needs a phone + the running server to verify interactively. |
 | `packages/web` — *superseded* | Holds only `.env` files. See "The web/mobile pivot" below. |
 
@@ -28,7 +28,7 @@ on a real phone by scanning a QR code.
 
 ```bash
 npm install
-npm run typecheck && npm test          # backend: 131 tests
+npm run typecheck && npm test          # backend: 133 tests
 
 npm run dev  -w @triage/server         # terminal 1: orchestrator on :8787
 npm run start -w @triage/mobile        # terminal 2: Expo, then scan the QR
@@ -156,6 +156,15 @@ Clinical scorer: LOCAL FALLBACK — no INFERMEDICA_APP_ID/APP_KEY...
 revision counter exists to prevent, and here that means a reported symptom
 silently vanishing.
 
+**Case ownership.** `CaseState.ownerUid` is required, not optional, and
+`POST /cases` rejects a request without one. `firebase/firestore.rules` matches
+reads against it, so a case written without an owner is invisible to every
+client — a failure with no error message anywhere, which would surface as a live
+view that simply never populates. Making the field mandatory turns that into a
+compile error and a 400 instead. The client never writes to Firestore at all;
+the confirm and cancel intents go over HTTP so the press-and-hold gate has
+exactly one enforcement point.
+
 ### Two invariants the code enforces structurally
 
 1. **The model cannot score.** No Groq output schema contains a risk tier,
@@ -233,13 +242,17 @@ spec and either a hard platform constraint or a free-tier-only budget.
    downloads a JSON file. This is the **backend** Admin credential. Save it
    **outside this repository** and put its path in the root `.env` as
    `GOOGLE_APPLICATION_CREDENTIALS`. It is already gitignored; never commit it.
-5. *(Optional, free)* **Authentication → Sign-in method → Anonymous** — gives
-   each device a stable uid so `firestore.rules` can scope a case to its owner,
-   with no signup flow.
+5. **Authentication → Sign-in method → Anonymous → Enable.** Free, no signup
+   flow, and no longer optional: `CaseState.ownerUid` is a required field and
+   `firestore.rules` scopes every read to `request.auth.uid`. Without it the
+   app falls back to a local device id, which will not satisfy the rules — so
+   once test mode is turned off, the live view goes blank.
 6. **Do not enable Cloud Functions.** It forces the Blaze plan. The Express
    orchestrator covers the same ground for free.
 
-Send me items **3** and **4** and I'll wire them in.
+Items **3** and **4** are wired in. The Admin credential lives at
+`C:/Users/User/.secrets/firebase-admin-medical-ai-hackathon.json` — outside the
+repo, referenced from the root `.env`. Steps **2** and **5** are still pending.
 
 ### Other keys, when you have them
 
@@ -260,13 +273,13 @@ explicitly when its key is absent rather than crashing the loop.
    are correctly shaped and internally consistent, but must be reconciled
    against a live `/parse` response once `INFERMEDICA_APP_ID` exists.
 
-2. **`firestore.rules` does not match the current case shape.** The rules gate
-   reads on `resource.data.ownerUid`, but `CaseState` has no `ownerUid` field
-   and the server never sets one — so deploying those rules as written would
-   deny every read. The demo works because the setup instructions above put
-   Firestore in **test mode**, which ignores them. Reconciling this means adding
-   an owner field to `CaseState` in `packages/shared`, which is out of scope for
-   this pivot and needs a decision before the rules go live.
+2. **Cloud Firestore is not enabled on the Firebase project yet.** The Admin
+   credential is valid and the server boots with `Firestore: ENABLED`, but the
+   first write returns `SERVICE_DISABLED` — the database itself has never been
+   created. Fix it in one step: **Build → Firestore Database → Create database**
+   (test mode, region `asia-south1`). Nothing in the code changes. Until then
+   the server answers with a 500 rather than dying, but no case is persisted and
+   the phone has nothing to listen to.
 
 3. **Running on a physical phone needs a LAN IP, not `localhost`.**
    `EXPO_PUBLIC_API_URL` currently points at `localhost:8787`, which only works
@@ -276,5 +289,5 @@ explicitly when its key is absent rather than crashing the loop.
    surfaces this as "Orchestrator unreachable" with that exact hint.
 
 4. **Not yet verified interactively.** The app typechecks and bundles for both
-   platforms, and the server is exercised by 11 HTTP tests, but the
+   platforms, and the server is exercised by 13 HTTP tests, but the
    phone → server → loop → phone round trip has not been run on a device.

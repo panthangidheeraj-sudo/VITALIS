@@ -5,7 +5,7 @@
  * happening in the loop or in `risk-policy.ts`.
  */
 
-import { Router, type Request, type Response } from 'express';
+import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { AgentTools, CaseId, CaseState } from '@triage/shared';
 import {
@@ -19,6 +19,12 @@ import { buildNewCase } from '../case-factory.js';
 import { compact } from '../util/compact.js';
 
 const createCaseSchema = z.object({
+  /**
+   * Firebase Auth uid from the device's anonymous sign-in. Required: it is what
+   * firebase/firestore.rules matches on, so a case created without it is
+   * written successfully and then invisible to every listener.
+   */
+  ownerUid: z.string().min(1).max(128),
   ageYears: z.number().int().min(0).max(130),
   sex: z.enum(['male', 'female']),
   language: z.enum(['en', 'hi', 'te', 'ta']).optional(),
@@ -47,6 +53,24 @@ const confirmSchema = z.object({
    */
   heldMs: z.number().min(0).max(60_000),
 });
+
+/**
+ * Routes a rejected promise into Express's error handler.
+ *
+ * Express 4 does not await async handlers, so a rejection escapes as an
+ * unhandled rejection and Node terminates the process. That is not theoretical
+ * here: a misconfigured Firestore (credential valid, database not yet created)
+ * took the whole server down on the first request instead of returning a 500
+ * that says what is wrong. An emergency orchestrator that dies on a backend
+ * fault is strictly worse than one that reports the fault.
+ */
+function wrap(
+  handler: (req: Request, res: Response) => Promise<void>,
+): (req: Request, res: Response, next: NextFunction) => void {
+  return (req, res, next) => {
+    handler(req, res).catch(next);
+  };
+}
 
 function toCaseId(req: Request): CaseId {
   return asCaseId(req.params['id'] as string);
@@ -77,7 +101,7 @@ export function createCaseRoutes(tools: AgentTools): Router {
   const router = Router();
 
   // --- Create a case ------------------------------------------------------
-  router.post('/', async (req: Request, res: Response) => {
+  router.post('/', wrap(async (req: Request, res: Response) => {
     const parsed = createCaseSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'invalid_request', issues: parsed.error.issues });
@@ -86,20 +110,20 @@ export function createCaseRoutes(tools: AgentTools): Router {
     const state = buildNewCase(compact(parsed.data), tools);
     await tools.store.create(state);
     res.status(201).json(summarize(state));
-  });
+  }));
 
   // --- Read a case (mobile normally uses a Firestore listener instead) -----
-  router.get('/:id', async (req: Request, res: Response) => {
+  router.get('/:id', wrap(async (req: Request, res: Response) => {
     const state = await tools.store.get(toCaseId(req));
     if (state === undefined) {
       res.status(404).json({ error: 'case_not_found' });
       return;
     }
     res.json(state);
-  });
+  }));
 
   // --- Submit a turn: this is the ODAEA loop ------------------------------
-  router.post('/:id/turns', async (req: Request, res: Response) => {
+  router.post('/:id/turns', wrap(async (req: Request, res: Response) => {
     const parsed = turnSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'invalid_request', issues: parsed.error.issues });
@@ -124,10 +148,10 @@ export function createCaseRoutes(tools: AgentTools): Router {
         toolCallCount: result.turn.toolCallIds.length,
       },
     });
-  });
+  }));
 
   // --- Confirm a proposed routing decision (the safety gate) --------------
-  router.post('/:id/confirm', async (req: Request, res: Response) => {
+  router.post('/:id/confirm', wrap(async (req: Request, res: Response) => {
     const parsed = confirmSchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: 'invalid_request', issues: parsed.error.issues });
@@ -172,10 +196,10 @@ export function createCaseRoutes(tools: AgentTools): Router {
     for (const call of result.toolCalls) await tools.store.appendToolCall(caseId, call);
 
     res.json(summarize({ ...result.nextState, revision: state.revision + 1 }));
-  });
+  }));
 
   // --- Cancel an active alert (§5.2: always available) --------------------
-  router.post('/:id/cancel', async (req: Request, res: Response) => {
+  router.post('/:id/cancel', wrap(async (req: Request, res: Response) => {
     const caseId = toCaseId(req);
     const state = await tools.store.get(caseId);
     if (state === undefined) {
@@ -210,7 +234,7 @@ export function createCaseRoutes(tools: AgentTools): Router {
     ]);
 
     res.json(summarize(next));
-  });
+  }));
 
   return router;
 }

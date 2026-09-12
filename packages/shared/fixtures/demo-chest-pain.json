@@ -23,6 +23,7 @@
     "caseId": "case_demo_chestpain_001",
     "schemaVersion": 1,
     "revision": 14,
+    "ownerUid": "uid_demo_device_001",
 
     "status": "action_taken",
     "mode": "companion",

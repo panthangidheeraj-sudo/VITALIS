@@ -69,7 +69,7 @@ const post = (path: string, body?: unknown) =>
   });
 
 async function newCase(): Promise<string> {
-  const res = await post('/cases', { ageYears: 52, sex: 'male' });
+  const res = await post('/cases', { ownerUid: 'uid_test_owner', ageYears: 52, sex: 'male' });
   const body = (await res.json()) as { caseId: string };
   return body.caseId;
 }
@@ -173,8 +173,26 @@ describe('the press-and-hold gate (§5.2, non-negotiable)', () => {
 
 describe('case lifecycle over HTTP', () => {
   it('rejects a malformed create request', async () => {
-    const res = await post('/cases', { ageYears: 'fifty', sex: 'male' });
+    const res = await post('/cases', { ownerUid: 'uid_test_owner', ageYears: 'fifty', sex: 'male' });
     expect(res.status).toBe(400);
+  });
+
+  /**
+   * Without an owner the case is written successfully and is then unreadable by
+   * every client, because firebase/firestore.rules matches on `ownerUid`. That
+   * failure is invisible at the HTTP layer and shows up only as a live view
+   * that never populates, so it is rejected at creation instead.
+   */
+  it('refuses to create a case with no owner', async () => {
+    const res = await post('/cases', { ageYears: 52, sex: 'male' });
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe('invalid_request');
+  });
+
+  it('persists the owner uid the security rules match on', async () => {
+    const caseId = await newCase();
+    const state = await store.get(asCaseId(caseId));
+    expect(state?.ownerUid).toBe('uid_test_owner');
   });
 
   it('starts with an incomplete state, as the problem statement requires', async () => {

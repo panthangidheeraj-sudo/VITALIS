@@ -99,6 +99,8 @@ export const api = {
   health: () => request<{ ok: boolean; firestoreEnabled: boolean; clinicalScorer: string }>('/health'),
 
   createCase: (input: {
+    /** Anonymous-auth uid; the server stores it as `CaseState.ownerUid`. */
+    ownerUid: string;
     ageYears: number;
     sex: BiologicalSex;
     language?: Language;

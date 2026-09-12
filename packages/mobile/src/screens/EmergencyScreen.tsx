@@ -32,6 +32,7 @@ import { QUICK_SELECT_OPTIONS } from '../data/quickSelectTags';
 import { api, ApiError, type CaseSummary, type TurnResponse } from '../api/client';
 import { useCaseState } from '../firebase/useCaseState';
 import { isFirebaseConfigured } from '../firebase/client';
+import { resolveOwnerUid } from '../identity';
 import { colors, radius, spacing, type } from '../theme';
 
 interface Props {
@@ -64,8 +65,11 @@ export function EmergencyScreen({ onDispatched, onBack }: Props) {
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .createCase({ ageYears: 52, sex: 'male' })
+    // Sign in BEFORE creating the case: the uid is what the security rules
+    // match on, so a case created without it would be written and then never
+    // appear on the listener.
+    resolveOwnerUid()
+      .then((ownerUid) => api.createCase({ ownerUid, ageYears: 52, sex: 'male' }))
       .then((created) => {
         if (cancelled) return;
         setCaseId(created.caseId);

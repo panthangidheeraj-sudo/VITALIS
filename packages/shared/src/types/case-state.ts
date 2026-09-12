@@ -21,6 +21,7 @@ import type {
   Millis,
   PatientId,
   TurnId,
+  Uid,
 } from './common.js';
 import type { CommunicationRead } from './communication.js';
 import type { ConfidenceState } from './confidence.js';
@@ -112,6 +113,33 @@ export interface CaseState {
    * another, which in this domain means losing a symptom.
    */
   readonly revision: number;
+
+  /**
+   * The Firebase Auth uid that opened this case, and the only identity the
+   * security rules will read it back to (plus `relayUids`).
+   *
+   * REQUIRED, deliberately. It would be easier to make this optional and avoid
+   * touching every construction site, but a case written without an owner is
+   * not readable by ANY client under firebase/firestore.rules — the listener
+   * simply returns nothing, with no error the UI can show. Making the field
+   * mandatory turns that into a compile error instead of a silent dead screen
+   * during a demo.
+   *
+   * It is set by the SERVER from the value the client supplies at case
+   * creation. That is not a trust boundary being crossed: a client can only
+   * name a uid it already knows, and naming someone else's uid would give away
+   * access rather than gain it. Verifying an ID token here would be stricter,
+   * and is the obvious hardening step if this ever left a hackathon.
+   */
+  readonly ownerUid: Uid;
+
+  /**
+   * Caregivers granted read access under Family Relay Mode (§5.5). Optional
+   * because the overwhelming majority of cases never have one, and the rules
+   * read it with a default (`caseData.get('relayUids', [])`) so an absent
+   * field is not an error there either.
+   */
+  readonly relayUids?: readonly Uid[];
 
   readonly status: CaseStatus;
   readonly mode: CaseMode;

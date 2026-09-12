@@ -9,9 +9,15 @@
  */
 
 import type { AgentTools, BiologicalSex, CaseState, Language } from '@triage/shared';
-import { asCaseId, COMPANION_DEFAULT_INTERVAL_MS } from '@triage/shared';
+import { asCaseId, asUid, COMPANION_DEFAULT_INTERVAL_MS } from '@triage/shared';
 
 export interface CreateCaseInput {
+  /**
+   * Firebase Auth uid of the device opening the case. Without it the case is
+   * written but unreadable by any client, so the route rejects a request that
+   * omits it rather than creating one that silently never appears on screen.
+   */
+  readonly ownerUid: string;
   readonly ageYears: number;
   readonly sex: BiologicalSex;
   readonly language?: Language;
@@ -27,6 +33,7 @@ export function buildNewCase(input: CreateCaseInput, tools: AgentTools): CaseSta
     caseId: asCaseId(tools.ids.newId('case')),
     schemaVersion: 1,
     revision: 0,
+    ownerUid: asUid(input.ownerUid),
     status: 'interviewing',
     mode: 'patient',
     language,

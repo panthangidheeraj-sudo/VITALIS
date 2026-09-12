@@ -29,6 +29,15 @@ export type ToolCallId = Brand<string, 'ToolCallId'>;
 export type PatientId = Brand<string, 'PatientId'>;
 export type ContactId = Brand<string, 'ContactId'>;
 
+/**
+ * A Firebase Auth uid. Branded like the rest so it cannot be confused with a
+ * PatientId — they look identical (opaque strings) but mean different things:
+ * a Uid identifies a DEVICE/sign-in, a PatientId identifies a person. One
+ * patient can be reached from several devices, and an anonymous uid is
+ * regenerated if the app's storage is cleared.
+ */
+export type Uid = Brand<string, 'Uid'>;
+
 /** Unsafe casts, for use only at trust boundaries (schema parse, ID generation). */
 export const asCaseId = (v: string): CaseId => v as CaseId;
 export const asTurnId = (v: string): TurnId => v as TurnId;
@@ -37,6 +46,7 @@ export const asTimelineEntryId = (v: string): TimelineEntryId => v as TimelineEn
 export const asToolCallId = (v: string): ToolCallId => v as ToolCallId;
 export const asPatientId = (v: string): PatientId => v as PatientId;
 export const asContactId = (v: string): ContactId => v as ContactId;
+export const asUid = (v: string): Uid => v as Uid;
 
 // --- Language ----------------------------------------------------------------
 
