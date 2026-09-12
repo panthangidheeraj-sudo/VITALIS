@@ -1,0 +1,28 @@
+{
+  "name": "@triage/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Express orchestrator. Wraps the @triage/agent loop in HTTP and persists case state to Firestore. The only place external API credentials ever live.",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --build",
+    "typecheck": "tsc --build",
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@triage/agent": "*",
+    "@triage/shared": "*",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "firebase-admin": "^13.0.2",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21"
+  }
+}

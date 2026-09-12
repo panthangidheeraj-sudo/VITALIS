@@ -16,27 +16,34 @@ autonomously diagnoses or prescribes.
 
 | Slice | State |
 |---|---|
-| `packages/shared` — contracts, case-state model, tool ports, routing policy, schemas | **Done.** Typechecks clean, 81 tests passing. |
-| `packages/agent` — the Observe→Decide→Act→Evaluate→Adapt loop | **Done.** Typechecks clean, 39 tests passing (120 total across the workspace). Runs end-to-end with zero API keys, against a deterministic local scorer and mock Groq/Infermedica/hospital adapters. |
-| `packages/server` — Express orchestrator, real API adapters | Next |
-| `packages/web` — React + Vite PWA, 3-screen flow | After server |
+| `packages/shared` — contracts, case-state model, tool ports, routing policy, schemas | **Done.** 81 tests passing. |
+| `packages/agent` — the Observe→Decide→Act→Evaluate→Adapt loop | **Done.** 39 tests passing. Runs end-to-end with zero API keys. |
+| `packages/server` — Express orchestrator, Firestore adapter | **Done.** 11 tests passing (131 total). Four endpoints wrapping the agent loop; real external adapters slot in behind the existing ports as credentials arrive. |
+| `packages/mobile` — **React Native (Expo) app, Android + iOS** | **Done.** Typechecks clean and bundles for both platforms. Needs a phone + the running server to verify interactively. |
+| `packages/web` — *superseded* | Holds only `.env` files. See "The web/mobile pivot" below. |
+
+**Platform decision:** the final deliverable is a React Native (Expo) mobile app,
+not a web PWA. Expo Go is the target runtime — no native build step, so it runs
+on a real phone by scanning a QR code.
 
 ```bash
 npm install
-npm run typecheck
-npm test
+npm run typecheck && npm test          # backend: 131 tests
+
+npm run dev  -w @triage/server         # terminal 1: orchestrator on :8787
+npm run start -w @triage/mobile        # terminal 2: Expo, then scan the QR
 ```
 
-No API keys and no network access are required for either command.
+No API keys and no network access are required to typecheck or test.
 
 ---
 
 ## Architecture
 
 ```
-Frontend (React + Vite PWA)          ← holds NO API keys
+Mobile app (React Native / Expo)     ← holds NO API keys
    │  reads live via Firestore listeners
-   │  writes only two intents: gate-hold, cancel
+   │  writes turns + gate confirmation via the orchestrator
    ▼
 Firestore  cases/{caseId}            ← persistent case state
    ▲
@@ -100,6 +107,55 @@ design, so the whole loop — including a full contradiction → adaptation →
 escalation walkthrough — runs and is asserted on in CI without touching the
 network.
 
+### The mobile app (`packages/mobile`)
+
+Expo SDK 57, Android + iOS, running in Expo Go. Three screens matching §9: Home
+(vitals dashboard, medication reminders, Emergency button), Confirmation and
+details (quick-select symptom tags, adaptive interview, press-and-hold gate),
+and Live tracking (map, ETA, always-visible Cancel Alert). Plus an offline
+first-aid screen.
+
+- **Firestore listeners, not polling.** `src/firebase/useCaseState.ts`
+  subscribes to the three streams `liveListenerTargets()` already names in
+  `@triage/shared`. The server writes a new risk tier and the phone updates
+  unprompted — that push is the §3.1 scored behaviour and the core of the demo.
+- **The press-and-hold gate imports its duration from `@triage/shared`**, so
+  the UI and the server's validation cannot disagree about what "3 seconds"
+  means. Releasing early resets to zero; a tap does nothing.
+- **Offline first-aid replaces the service worker.** React Native has no
+  service-worker layer, so content is bundled into the app (offline by
+  construction) and mirrored into AsyncStorage so it can be refreshed over the
+  air later. Reads fall back to the bundled copy on any storage failure.
+- **No credentials on the device.** Only the public Firebase web config
+  (`EXPO_PUBLIC_*`), which is public by design. Groq, Infermedica and Twilio
+  keys exist only in the server's root `.env`.
+
+Two deliberate deviations worth knowing:
+
+- **No expo-router.** The flow is linear and the app wants to *control* the
+  Android back button rather than delegate it — popping out of an active
+  dispatch would be wrong. Screen state is a discriminated union in `App.tsx`.
+- **`react-native-maps` is loaded via `require()` in a try/catch.** It has a
+  history of rendering blank in Expo Go on some SDK versions; a static import
+  would take the whole tracking screen down with it. On failure `MapPanel`
+  degrades to a coordinate card, and ETA/destination/cancel all still work.
+
+### The orchestrator (`packages/server`)
+
+Four endpoints — create case, submit turn, confirm, cancel — wrapping the
+agent loop. It prints its real capabilities at boot rather than pretending to
+be fully wired:
+
+```
+Firestore      : DISABLED — no GOOGLE_APPLICATION_CREDENTIALS...
+Clinical scorer: LOCAL FALLBACK — no INFERMEDICA_APP_ID/APP_KEY...
+```
+
+`FirestoreCaseStore.update()` maps the port's revision check onto a Firestore
+**transaction** — a read-then-write would reintroduce the lost-update race the
+revision counter exists to prevent, and here that means a reported symptom
+silently vanishing.
+
 ### Two invariants the code enforces structurally
 
 1. **The model cannot score.** No Groq output schema contains a risk tier,
@@ -130,6 +186,22 @@ the tests fail.
 
 ---
 
+## The web/mobile pivot
+
+The final deliverable moved from a web PWA to React Native (Expo). **Nothing was
+discarded:** `packages/web` never contained an app — only `.env` files — so
+there was no PWA to replace, no service-worker cache to re-architect, and no
+fallback demo path lost. `packages/shared` and `packages/agent` were not touched
+by the pivot (verifiable: `git status packages/shared packages/agent` is empty),
+because nothing platform-specific was ever written into them.
+
+`packages/web` is retained for now but is **not a fallback** — it is two env
+files. It should be deleted once the mobile app is confirmed working on a
+device; carrying an empty package into submission invites a judge to open it and
+find nothing.
+
+---
+
 ## Deviations from the spec
 
 Flagged rather than silently applied. Each was a conflict between the locked
@@ -153,9 +225,10 @@ spec and either a hard platform constraint or a free-tier-only budget.
 2. **Build → Firestore Database → Create database** → *Start in test mode* →
    region **`asia-south1` (Mumbai)**.
 3. **Project settings → General → Your apps → Web (`</>`)** → register the app →
-   copy the `firebaseConfig` object. This is the **frontend** config; it goes in
-   `packages/web/.env` as `VITE_FIREBASE_*`. These values are public by design —
-   the security rules, not secrecy, are what protect the data.
+   copy the `firebaseConfig` object. This is the **mobile** config; it goes in
+   `packages/mobile/.env` as `EXPO_PUBLIC_FIREBASE_*` (already populated). These
+   values are public by design — the security rules, not secrecy, protect the
+   data.
 4. **Project settings → Service accounts → Generate new private key** →
    downloads a JSON file. This is the **backend** Admin credential. Save it
    **outside this repository** and put its path in the root `.env` as
@@ -180,9 +253,28 @@ explicitly when its key is absent rather than crashing the loop.
 
 ---
 
-## Open item
+## Open items
 
-Concept ids in the demo fixture (`s_21`, `s_98`, `s_13`, `s_47`, `p_8`) are
-**placeholders**. They are correctly shaped and satisfy the schema, but must be
-reconciled against a live `/parse` response once `INFERMEDICA_APP_ID` is
-available. Nothing else depends on their exact values.
+1. **Concept ids are placeholders.** Those in the demo fixture, `quick-select.ts`
+   and the server's `demo-lexicon.ts` (`s_21`, `s_98`, `s_13`, `s_47`, `p_8`…)
+   are correctly shaped and internally consistent, but must be reconciled
+   against a live `/parse` response once `INFERMEDICA_APP_ID` exists.
+
+2. **`firestore.rules` does not match the current case shape.** The rules gate
+   reads on `resource.data.ownerUid`, but `CaseState` has no `ownerUid` field
+   and the server never sets one — so deploying those rules as written would
+   deny every read. The demo works because the setup instructions above put
+   Firestore in **test mode**, which ignores them. Reconciling this means adding
+   an owner field to `CaseState` in `packages/shared`, which is out of scope for
+   this pivot and needs a decision before the rules go live.
+
+3. **Running on a physical phone needs a LAN IP, not `localhost`.**
+   `EXPO_PUBLIC_API_URL` currently points at `localhost:8787`, which only works
+   on an emulator — on a real device `localhost` is the phone itself. Set it to
+   the address `npx expo start` prints and restart the dev server (Expo inlines
+   these at bundle time, so a reload alone will not pick it up). The Home screen
+   surfaces this as "Orchestrator unreachable" with that exact hint.
+
+4. **Not yet verified interactively.** The app typechecks and bundles for both
+   platforms, and the server is exercised by 11 HTTP tests, but the
+   phone → server → loop → phone round trip has not been run on a device.
