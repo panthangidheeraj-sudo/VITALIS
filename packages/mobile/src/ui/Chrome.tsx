@@ -41,26 +41,34 @@ export function Screen({
       end={pageWash.end}
       style={styles.fill}
     >
-      {/* Every screen routed through here (the symptom-tag input on Emergency,
-          the profile editor, the medicine scanner) gets keyboard-avoidance for
-          free — `padding` on iOS resizes the content area itself; Android has
-          no equivalent transform, so `height` shrinks the container instead.
+      {/* Every SCROLLING screen routed through here (the symptom-tag input on
+          Emergency, the profile editor, the medicine scanner) gets keyboard-
+          avoidance for free — `padding` on iOS resizes the content area
+          itself; Android has no equivalent transform, so `height` shrinks the
+          container instead (also needs `windowSoftInputMode: adjustResize`,
+          set via app.json's `android.softwareKeyboardLayoutMode`, or Android
+          never actually resizes the window for `height` to shrink against).
           Without this, the keyboard simply draws on top of whatever is behind
-          it, which is what was hiding the input and the last few messages. */}
-      <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
-        <Body
-          style={styles.fill}
-          {...(scroll
-            ? {
-                contentContainerStyle: styles.scrollPad,
-                showsVerticalScrollIndicator: false,
-                keyboardShouldPersistTaps: 'handled' as const,
-              }
-            : {})}
-        >
-          {children}
-        </Body>
-      </KeyboardAvoidingView>
+          it, which is what was hiding the input and the last few messages.
+
+          SKIPPED when `scroll` is false: that is Assistant's own screen,
+          which already wraps itself in `KeyboardAvoidingView` — nesting two
+          of them here made the keyboard behavior worse, not better, since
+          both were resizing the same space independently. */}
+      {scroll ? (
+        <KeyboardAvoidingView style={styles.fill} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+          <Body
+            style={styles.fill}
+            contentContainerStyle={styles.scrollPad}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {children}
+          </Body>
+        </KeyboardAvoidingView>
+      ) : (
+        <Body style={styles.fill}>{children}</Body>
+      )}
       {footer === undefined ? null : <View style={styles.footer}>{footer}</View>}
       {hideNav || onTab === undefined ? null : <BottomNav active={tab} onTab={onTab} />}
     </LinearGradient>
