@@ -16,9 +16,28 @@
  * provider that wraps the whole app rather than one screen. AssistantScreen
  * itself can still mount and unmount freely; the conversation lives here
  * instead and is simply still there when the screen comes back.
+ *
+ * ---------------------------------------------------------------------------
+ * `caseId` LIVES HERE TOO, AND THAT IS DELIBERATE.
+ *
+ * When a message in chat looks clinical, the assistant does not open a second,
+ * chat-flavoured scoring path — it starts (or continues) ONE real case through
+ * the SAME `api.submitText` turn the full triage screen uses, and that case id
+ * is what has to survive navigation for "continue the conversation" to mean
+ * anything. Keeping it beside the messages, in the same provider, is what lets
+ * AssistantScreen and EmergencyScreen agree on "the case this conversation
+ * opened" without a second store to keep in sync.
+ *
+ * It is NOT the same thing as tapping "Start emergency triage" from Home —
+ * that button always opens a fresh case on purpose, because a tap on the one
+ * button whose entire job is summoning help must never silently resume an old,
+ * possibly-closed case. Chat continuity and the emergency button's always-new
+ * guarantee are different promises; this field only ever serves the first one.
+ * ---------------------------------------------------------------------------
  */
 
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import type { CaseId } from '@triage/shared';
 
 export interface AssistantMessage {
   readonly id: string;
@@ -37,8 +56,9 @@ interface AssistantChatState {
   readonly setDraft: (draft: string) => void;
   readonly handoffPending: boolean;
   readonly setHandoffPending: (v: boolean) => void;
-  readonly photoPrompted: boolean;
-  readonly setPhotoPrompted: (v: boolean) => void;
+  /** The case this conversation opened, once a clinical message has fired. */
+  readonly caseId: CaseId | undefined;
+  readonly setCaseId: (id: CaseId) => void;
 }
 
 const AssistantChatContext = createContext<AssistantChatState | undefined>(undefined);
@@ -53,11 +73,11 @@ export function AssistantChatProvider({
   const [messages, setMessages] = useState<readonly AssistantMessage[]>([opening]);
   const [draft, setDraft] = useState('');
   const [handoffPending, setHandoffPending] = useState(false);
-  const [photoPrompted, setPhotoPrompted] = useState(false);
+  const [caseId, setCaseId] = useState<CaseId | undefined>(undefined);
 
   const value = useMemo<AssistantChatState>(
-    () => ({ messages, setMessages, draft, setDraft, handoffPending, setHandoffPending, photoPrompted, setPhotoPrompted }),
-    [messages, draft, handoffPending, photoPrompted],
+    () => ({ messages, setMessages, draft, setDraft, handoffPending, setHandoffPending, caseId, setCaseId }),
+    [messages, draft, handoffPending, caseId],
   );
 
   return <AssistantChatContext.Provider value={value}>{children}</AssistantChatContext.Provider>;

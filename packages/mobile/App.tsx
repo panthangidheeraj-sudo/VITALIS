@@ -86,7 +86,7 @@ const ASSISTANT_OPENING = {
 type ScreenState =
   | { readonly name: 'home' }
   | { readonly name: 'assistant' }
-  | { readonly name: 'emergency' }
+  | { readonly name: 'emergency'; readonly openCaseId?: CaseId }
   | { readonly name: 'tracking'; readonly caseId: CaseId }
   | { readonly name: 'firstAid' }
   | { readonly name: 'emergencyCard' }
@@ -234,7 +234,9 @@ function AppShell() {
         ) : null}
 
         {screen.name === 'assistant' ? (
-          <AssistantScreen onStartTriage={() => setScreen({ name: 'emergency' })} />
+          <AssistantScreen
+            onOpenFullCase={(caseId) => setScreen({ name: 'emergency', openCaseId: caseId })}
+          />
         ) : null}
 
         {screen.name === 'emergency' ? (
@@ -243,6 +245,7 @@ function AppShell() {
             onEscalated={(caseId) => setScreen({ name: 'escalated', caseId })}
             onPhoto={(caseId) => setScreen({ name: 'photo', caseId })}
             onBack={() => setScreen({ name: 'home' })}
+            {...(screen.openCaseId === undefined ? {} : { openCaseId: screen.openCaseId })}
           />
         ) : null}
 

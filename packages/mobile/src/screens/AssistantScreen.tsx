@@ -5,50 +5,50 @@
  * THE ONE RULE THIS SCREEN EXISTS TO ENFORCE
  *
  * General health questions are answered here. Anything that looks like an
- * emergency is NOT. The design's own script shows exactly this: the assistant
- * answers a blood-pressure question happily, and the moment the user says
- * "my chest feels a bit heavy" it stops and says so —
+ * emergency is NOT — it becomes a real turn on a real case, through the exact
+ * same `api.submitText` the full triage screen calls. There is no second
+ * scoring path: the deterministic scorer, the confidence axis, the
+ * contradiction check and the press-and-hold gate are the same code running
+ * whether the words came from this composer or from EmergencyScreen's. What
+ * changes is only where the conversation happens to be typed.
  *
- *     "I am going to stop the general conversation there. Chest heaviness with
- *      your history needs the triage interview, not a chat answer."
- *
- * That is a hard handoff, not a suggestion, and it is the difference between a
- * medical chatbot and this system. A free-text model reply about chest pain
- * would bypass the deterministic scorer, the confidence axis, the
- * contradiction check and the press-and-hold gate all at once — every safety
- * property the rest of the app is built from, defeated by a text box.
- *
- * So the gate is a LOCAL keyword check, not a model judgement. A model deciding
- * whether a message is an emergency is a model with a veto over the emergency
- * path, and the §6 boundary says no model gets that. It over-triggers on
- * purpose: being sent to the interview when you did not need it costs a tap,
- * and the opposite costs much more.
+ * So the gate that decides "does this become a case?" is a LOCAL keyword
+ * check, not a model judgement. A model deciding whether a message is an
+ * emergency is a model with a veto over the emergency path, and the §6
+ * boundary says no model gets that. It over-triggers on purpose: being routed
+ * into triage when you did not need it costs a tap; the opposite costs much
+ * more.
  * ---------------------------------------------------------------------------
  *
- * NO CAMERA HERE, DELIBERATELY. A photo-attach affordance briefly lived in
- * this composer and was removed: injury photography (§5.7, "AI Injury Scan")
- * is scoped to an ACTIVE emergency case — the vision port describes what is
- * visible and that becomes one more piece of evidence on a case record that
- * does not exist yet on this screen. A camera icon here implied general
- * photo-based diagnosis, which is exactly the capability this screen exists
- * to refuse. The photo step lives inside the triage flow, on
- * `PhotoInjuryScreen`, reached from `EmergencyScreen`.
+ * ONCE A CASE IS OPEN, EVERY MESSAGE IN THIS CHAT IS A TURN ON IT — not just
+ * the one that triggered it. "Hi" after "I have chest pain" is not small talk
+ * anymore; it is the next thing the interview heard, and it has to reach the
+ * scorer like anything else the patient says. The small-talk detector below
+ * only ever runs BEFORE a case exists, for exactly this reason.
  *
- * CHAT STATE LIVES IN A PROVIDER, NOT HERE. App.tsx unmounts every screen that
- * is not the active one, so a `useState` in this component was wiped every
- * time the user navigated away and back — see `state/assistantChat.tsx`.
+ * THE TIER SHOWN HERE IS THE SAME TIER, not a chat-only estimate. It comes
+ * from `buildCaseView` over the same live `CaseState` EmergencyScreen reads —
+ * see `state/caseView.ts`. There is nothing on this screen that could disagree
+ * with the full triage view, because they are reading the same document.
  *
- * There is no general-chat endpoint on the orchestrator yet, so the assistant
- * cannot answer freely. Rather than fake replies, an unrecognised message gets
- * an honest "I cannot answer general questions yet" and the triage route stays
- * one tap away. A fabricated health answer is the worst thing this file could
- * contain. (Confirmed working-as-designed, not a bug — see the assistant
- * chat's own status line: "General chat: not available · triage: available."
- * Wiring it up is a separate, larger decision — see the PR discussion on
- * scope before that gets built.)
+ * THE HOLD DIAL IS THE SAME COMPONENT, not a second confirmation mechanism.
+ * When a routing decision is proposed mid-conversation, `<HoldDial>` — the
+ * exact component EmergencyScreen uses — renders inline here too, calling the
+ * same `api.confirm`.
+ *
+ * NO CAMERA HERE, DELIBERATELY. Injury photography (§5.7) attaches to a case
+ * that already exists and is reached from the full triage view
+ * (`PhotoInjuryScreen`) — a camera icon in general chat implied photo-based
+ * diagnosis with no case behind it, which is exactly the capability this
+ * screen exists to refuse.
+ *
+ * CHAT STATE — MESSAGES AND THE OPEN CASE ID — LIVES IN A PROVIDER, NOT HERE.
+ * App.tsx unmounts every screen that is not the active one, so a `useState`
+ * in this component was wiped every time the user navigated away and back —
+ * see `state/assistantChat.tsx`.
  */
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -59,17 +59,27 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import type { CaseId } from '@triage/shared';
 import { WaveField } from '../ui/WaveField';
+import { HoldDial } from '../components/HoldDial';
 import { Label, PrimaryButton } from '../ui/primitives';
 import { Wordmark } from '../ui/Chrome';
 import { useAssistantChat } from '../state/assistantChat';
-import { colors, fonts, radius, shadow, spacing, type } from '../theme';
+import { api, ApiError, type TurnResponse } from '../api/client';
+import { DEMO_DEMOGRAPHICS } from '../data/demoProfile';
+import { demoNotifiableContacts } from '../data/notifiableContacts';
+import { reportLocationOnce } from '../location/reportLocation';
+import { resolveOwnerUid } from '../identity';
+import { useCaseState } from '../firebase/useCaseState';
+import { isFirebaseConfigured } from '../firebase/client';
+import { buildCaseView } from '../state/caseView';
+import { colors, fonts, radius, shadow, spacing, tierColor, tierLabel, type } from '../theme';
 
 /**
- * Words that end the conversation and start the interview.
+ * Words that start a case.
  *
  * Deliberately blunt and deliberately broad. This list will produce false
- * positives — "my head hurts a bit" routes to triage — and that is the correct
+ * positives — "my head hurts a bit" opens a case — and that is the correct
  * direction to be wrong in. Reviewing it is a clinical task, which is why it is
  * a plain readable list rather than a regex nobody can check.
  */
@@ -88,13 +98,8 @@ function needsTriage(text: string): boolean {
 
 /**
  * Small talk gets a small-talk answer, not the "I cannot answer general
- * health questions yet" deflection.
- *
- * That deflection exists so the assistant never fabricates a medical answer —
- * it has no reason to fire on "hi". A plain greeting matched against zero
- * clinical content the deflection was built to guard, so answering it plainly
- * carries none of the fabrication risk the rest of this file is written
- * around.
+ * health questions yet" deflection. Only ever consulted before a case exists
+ * — see the file header for why "hi" mid-interview is not small talk.
  */
 const GREETING_PATTERN = /^\s*(hi|hello|hey|yo|hii+|hiya|good\s?(morning|afternoon|evening)|thanks?|thank\s?you|ty|bye|goodbye|ok|okay)\s*[!.]*\s*$/i;
 
@@ -102,60 +107,154 @@ function greetingReply(text: string): string | undefined {
   if (!GREETING_PATTERN.test(text)) return undefined;
   const lower = text.toLowerCase();
   if (/thank/.test(lower) || lower === 'ty') {
-    return "You're welcome. I'm here if anything comes up — and if it's urgent, say so and I'll move you straight to triage.";
+    return "You're welcome. I'm here if anything comes up — and if it's urgent, say so and I'll start tracking it as a case.";
   }
   if (/bye|goodbye/.test(lower)) {
     return 'Take care. Your emergency card and first aid guides stay available offline any time.';
   }
-  return 'Hi — ask me about a reading, a medication, or how you are feeling. If it sounds urgent I will move you to the triage interview instead.';
+  return 'Hi — ask me about a reading, a medication, or how you are feeling. If it sounds urgent I will start a case and track it properly.';
 }
 
-export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () => void }) {
-  const { messages, setMessages, draft, setDraft, handoffPending, setHandoffPending } =
-    useAssistantChat();
+export function AssistantScreen({
+  onOpenFullCase,
+}: {
+  /** Opens the same case in EmergencyScreen's full interview view — the tag
+   * picker, the tool-call ledger — none of which chat has room to duplicate. */
+  readonly onOpenFullCase: (caseId: CaseId) => void;
+}) {
+  const { messages, setMessages, draft, setDraft, caseId, setCaseId } = useAssistantChat();
   const scroller = useRef<ScrollView>(null);
+  const [busy, setBusy] = useState(false);
 
-  // Land back where the conversation left off, not at the top, when this
-  // screen remounts after navigating away and back.
+  const live = useCaseState(isFirebaseConfigured() ? caseId : undefined);
+  const state = live.caseState;
+  const view = useMemo(
+    () => (state === undefined ? undefined : buildCaseView(state, live.timeline, live.toolCalls)),
+    [state, live.timeline, live.toolCalls],
+  );
+  const awaitingConfirmation = state?.status === 'awaiting_confirmation' && state.routing !== undefined;
+
   useEffect(() => {
     if (messages.length > 1) {
       requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: false }));
     }
-    // Intentionally once on mount — this is a "restore scroll position," not
-    // a "follow new messages" effect; `send` already scrolls on its own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const send = useCallback(() => {
+  const appendAgent = useCallback(
+    (text: string, meta?: string, handoff?: boolean) => {
+      setMessages((prev) => [
+        ...prev,
+        { id: `a${Date.now()}${Math.random()}`, who: 'agent' as const, text, ...(meta === undefined ? {} : { meta }), ...(handoff === undefined ? {} : { handoff }) },
+      ]);
+    },
+    [setMessages],
+  );
+
+  /** Opens the case this conversation needs, once, the first time it needs one. */
+  const openCase = useCallback(async (): Promise<CaseId> => {
+    const ownerUid = await resolveOwnerUid();
+    const created = await api.createCase({ ownerUid, ageYears: 52, sex: 'male' });
+    setCaseId(created.caseId);
+    void reportLocationOnce(created.caseId);
+    return created.caseId;
+  }, [setCaseId]);
+
+  const applyTurn = useCallback(
+    (result: TurnResponse) => {
+      if (result.turn.question !== undefined) {
+        appendAgent(
+          result.turn.question.text,
+          result.turn.question.hardToDeflect ? 'I need a clear answer on this' : undefined,
+        );
+      }
+      if (result.turn.adaptation !== undefined) {
+        appendAgent(
+          result.turn.adaptation.explanation,
+          `Re-planned · ${result.turn.adaptation.trigger.replace(/_/g, ' ')}`,
+        );
+      }
+      if (result.turn.question === undefined && result.turn.adaptation === undefined) {
+        appendAgent('Noted. Keep going, or tell me if anything changes.');
+      }
+      requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
+    },
+    [appendAgent],
+  );
+
+  const send = useCallback(async () => {
     const text = draft.trim();
-    if (text.length === 0) return;
+    if (text.length === 0 || busy) return;
     setDraft('');
-
-    const user = { id: `u${Date.now()}`, who: 'user' as const, text };
-    const escalate = needsTriage(text);
-    const greeting = escalate ? undefined : greetingReply(text);
-
-    const reply = escalate
-      ? {
-          id: `a${Date.now()}`,
-          who: 'agent' as const,
-          handoff: true,
-          text: 'I am going to stop the general conversation there. What you have described needs the triage interview, not a chat answer. It takes about a minute and I ask one thing at a time.',
-          meta: 'You can cancel at any point · nothing is dispatched without you',
-        }
-      : greeting !== undefined
-        ? { id: `a${Date.now()}`, who: 'agent' as const, text: greeting }
-        : {
-            id: `a${Date.now()}`,
-            who: 'agent' as const,
-            text: 'I cannot answer general health questions yet — the assistant is not wired to a knowledge endpoint in this build, and I would rather say so than make something up. If this is about symptoms you are having right now, start the triage interview and I can actually help.',
-            meta: 'General chat: not available · triage: available',
-          };
-
-    setMessages((prev) => [...prev, user, reply]);
-    setHandoffPending(escalate);
+    setMessages((prev) => [...prev, { id: `u${Date.now()}`, who: 'user' as const, text }]);
     requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
-  }, [draft, setDraft, setHandoffPending, setMessages]);
+
+    // A CASE ALREADY EXISTS: every message is now a turn on it, full stop —
+    // no re-running the small-talk/escalation check. See the file header.
+    if (caseId !== undefined) {
+      setBusy(true);
+      try {
+        applyTurn(await api.submitText(caseId, text));
+      } catch (err) {
+        appendAgent(
+          err instanceof ApiError
+            ? err.message
+            : 'That did not reach your case. Try again, or open the full interview.',
+        );
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    // NO CASE YET: decide whether this message starts one.
+    const escalate = needsTriage(text);
+    if (!escalate) {
+      const greeting = greetingReply(text);
+      appendAgent(
+        greeting ??
+          'I cannot answer general health questions yet — the assistant is not wired to a knowledge endpoint in this build, and I would rather say so than make something up. If this is about symptoms you are having right now, tell me and I will start tracking it as a case.',
+        greeting === undefined ? 'General chat: not available · triage: available' : undefined,
+      );
+      return;
+    }
+
+    setBusy(true);
+    appendAgent(
+      'That needs proper tracking, not a chat answer — I am opening a case and everything from here becomes part of it. You can cancel at any point.',
+      'Case opened · scored by the same engine as full triage',
+    );
+    try {
+      const id = await openCase();
+      applyTurn(await api.submitText(id, text));
+    } catch (err) {
+      appendAgent(
+        err instanceof ApiError ? err.message : 'Could not open a case. Try the full triage screen instead.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }, [applyTurn, appendAgent, busy, caseId, draft, openCase, setDraft, setMessages]);
+
+  const confirm = useCallback(
+    async (heldMs: number) => {
+      if (caseId === undefined) return;
+      setBusy(true);
+      try {
+        await api.confirm(caseId, heldMs, {
+          contacts: demoNotifiableContacts(),
+          patientName: DEMO_DEMOGRAPHICS.displayName ?? 'Your contact',
+          shareLocation: true,
+        });
+        onOpenFullCase(caseId);
+      } catch (err) {
+        appendAgent(err instanceof ApiError ? err.message : 'Could not confirm. Try the full triage screen.');
+      } finally {
+        setBusy(false);
+      }
+    },
+    [appendAgent, caseId, onOpenFullCase],
+  );
 
   const started = messages.length > 1;
 
@@ -168,6 +267,16 @@ export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () 
 
       <View style={styles.header}>
         <Wordmark />
+        {/* The live tier — same document, same engine, read here or on the
+            full screen. Present only once a case exists. */}
+        {view !== undefined ? (
+          <Pressable
+            onPress={() => onOpenFullCase(caseId as CaseId)}
+            style={[styles.tierChip, { backgroundColor: tierColor[view.tier] }]}
+          >
+            <Text style={styles.tierChipText}>{tierLabel[view.tier]}</Text>
+          </Pressable>
+        ) : null}
       </View>
 
       <ScrollView
@@ -206,15 +315,27 @@ export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () 
           </View>
         ))}
 
-        {/* The handoff is a button, not a link inside a sentence. Once the
-            assistant has said it is stopping, continuing to type must be the
-            harder path. */}
-        {handoffPending ? (
-          <PrimaryButton
-            label="Start emergency triage"
-            onPress={onStartTriage}
-            style={{ marginTop: spacing.lg }}
-          />
+        {/* The hold dial — the SAME component EmergencyScreen uses, calling
+            the same api.confirm. Not a second confirmation mechanism. */}
+        {awaitingConfirmation && state?.routing !== undefined ? (
+          <View style={styles.proposal}>
+            <Label color={colors.dangerDeep}>RECOMMENDED OUTCOME</Label>
+            <Text style={styles.proposalTitle}>
+              {state.routing.outcome.replace(/_/g, ' ')}
+            </Text>
+            <Text style={[type.small, { marginTop: 6 }]}>{state.routing.gate.consequenceStatement}</Text>
+            {state.routing.gate.kind === 'press_and_hold_3s' ? (
+              <HoldDial onHoldComplete={confirm} disabled={busy} />
+            ) : (
+              <PrimaryButton label="Confirm" onPress={() => void confirm(0)} busy={busy} style={{ marginTop: 16 }} />
+            )}
+          </View>
+        ) : null}
+
+        {caseId !== undefined ? (
+          <Pressable onPress={() => onOpenFullCase(caseId)} style={{ alignSelf: 'center', marginTop: spacing.md }}>
+            <Text style={styles.fullCaseLink}>Open full interview →</Text>
+          </Pressable>
         ) : null}
       </ScrollView>
 
@@ -226,12 +347,12 @@ export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () 
             placeholder="Ask Vitalis anything about your health…"
             placeholderTextColor={colors.faint}
             style={styles.input}
-            onSubmitEditing={send}
+            onSubmitEditing={() => void send()}
             returnKeyType="send"
           />
         </View>
         <Pressable
-          onPress={send}
+          onPress={() => void send()}
           style={({ pressed }) => [styles.sendButton, pressed ? { transform: [{ scale: 0.9 }] } : null]}
         >
           <Text style={styles.sendGlyph}>↑</Text>
@@ -243,7 +364,16 @@ export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () 
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { paddingHorizontal: spacing.xxl, paddingTop: spacing.xs, paddingBottom: spacing.sm },
+  header: {
+    paddingHorizontal: spacing.xxl,
+    paddingTop: spacing.xs,
+    paddingBottom: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tierChip: { paddingVertical: 5, paddingHorizontal: 11, borderRadius: radius.pill },
+  tierChipText: { fontFamily: fonts.sansBold, fontSize: 10.5, color: colors.white, letterSpacing: 0.4 },
   thread: { flex: 1 },
   threadPad: { paddingHorizontal: spacing.xxl, paddingBottom: spacing.xl, gap: spacing.lg },
 
@@ -312,6 +442,24 @@ const styles = StyleSheet.create({
   },
   agentText: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 20, color: colors.ink },
   meta: { fontFamily: fonts.monoMedium, fontSize: 10, lineHeight: 14, color: colors.label, paddingHorizontal: 4 },
+
+  proposal: {
+    marginTop: spacing.lg,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderWidth: 2,
+    borderColor: 'rgba(220,38,38,0.5)',
+    borderRadius: radius.xxl,
+    padding: 18,
+    ...shadow('hero'),
+  },
+  proposalTitle: {
+    fontFamily: fonts.sansBlack,
+    fontSize: 18,
+    color: colors.dangerDeep,
+    marginTop: 8,
+    textTransform: 'capitalize',
+  },
+  fullCaseLink: { fontFamily: fonts.sansSemi, fontSize: 12, color: colors.brand },
 
   composer: {
     flexDirection: 'row',

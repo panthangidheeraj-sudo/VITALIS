@@ -56,10 +56,19 @@ interface Props {
   readonly onEscalated: (caseId: CaseId) => void;
   readonly onBack: () => void;
   readonly onPhoto: (caseId: CaseId) => void;
+  /**
+   * Opens an ALREADY-EXISTING case instead of creating a new one — how the
+   * assistant hands a conversation that has opened a case off to the full
+   * interview. Absent for the ordinary path: tapping "Start emergency
+   * triage" from Home or the tab bar always opens a fresh case, deliberately
+   * — the one button whose entire job is summoning help must never silently
+   * resume an old, possibly-closed one. See `state/assistantChat.tsx`.
+   */
+  readonly openCaseId?: CaseId;
 }
 
-export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto }: Props) {
-  const [caseId, setCaseId] = useState<CaseId | undefined>(undefined);
+export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto, openCaseId }: Props) {
+  const [caseId, setCaseId] = useState<CaseId | undefined>(openCaseId);
   const [summary, setSummary] = useState<CaseSummary | undefined>(undefined);
   const [lastTurn, setLastTurn] = useState<TurnResponse['turn'] | undefined>(undefined);
   const [selected, setSelected] = useState<readonly string[]>([]);
@@ -84,6 +93,26 @@ export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto }: 
   const guardian = useGuardian({ status, tier, enabled: guardianEnabled });
 
   useEffect(() => {
+    if (openCaseId !== undefined) {
+      // Reusing the assistant's case. The live Firestore listener above
+      // already covers most of the screen; this GET is only the fallback for
+      // when Firebase is not configured, so the screen still has something to
+      // render instead of sitting on the loading state forever.
+      if (isFirebaseConfigured()) return;
+      let cancelled = false;
+      api
+        .getCase(openCaseId)
+        .then((fetched) => {
+          if (!cancelled) setSummary(fetched);
+        })
+        .catch((err: unknown) => {
+          if (!cancelled) setError(describe(err));
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     let cancelled = false;
     resolveOwnerUid()
       .then((ownerUid) => api.createCase({ ownerUid, ageYears: 52, sex: 'male' }))
@@ -99,7 +128,7 @@ export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto }: 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [openCaseId]);
 
   /** Escalation is an outcome, not an error — it gets its own screen (§1). */
   useEffect(() => {

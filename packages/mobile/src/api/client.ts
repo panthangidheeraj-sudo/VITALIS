@@ -232,6 +232,20 @@ export const api = {
   cancel: (caseId: CaseId) => request<CaseSummary>(`/cases/${caseId}/cancel`),
 
   /**
+   * Fetches the current case. The server's `GET /cases/:id` returns the full
+   * `CaseState` document, a strict superset of `CaseSummary`'s fields — typed
+   * as a summary here because that is all any caller of this method actually
+   * reads, the same "the client only knows the shape it needs" boundary the
+   * summary type draws everywhere else.
+   *
+   * Used only to seed a screen that is OPENING an already-existing case (the
+   * assistant handing an in-progress conversation off to the full triage
+   * view) rather than creating one — a screen that calls `createCase` has no
+   * need for this.
+   */
+  getCase: (caseId: CaseId) => request<CaseSummary>(`/cases/${caseId}`),
+
+  /**
    * Best-effort position report, for hospital matching (5.3).
    *
    * Nothing waits on this and nothing fails if it never happens - see
