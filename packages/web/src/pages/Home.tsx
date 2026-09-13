@@ -1,23 +1,30 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
-import { useMedications } from '../data/medicationStore';
+import { VitalsPanel } from '../components/VitalsPanel';
+import { MedicationsPanel } from '../components/MedicationsPanel';
+import { PhoneIcon, GearIcon, BandageIcon, BloodDropIcon, ChevronRightSmall } from '../components/icons';
 
+/**
+ * Ported from packages/mobile/src/screens/HomeScreen.tsx's uncommitted
+ * redesign: the red/blue-glass emergency banner, the vitals/medications
+ * glass cards, and the feature-tile grid (icon circle + chevron badge +
+ * title + sub) are the SAME components in the SAME arrangement, not a
+ * generic recreation. Two differences from the mobile screen, both scoping
+ * decisions: no Profile/Medicine-scanner tiles (those pages don't exist in
+ * this web build) and a connection-status pill was kept (the mobile
+ * redesign dropped it, but it has real diagnostic value on the web where
+ * there's no native "orchestrator unreachable" handling elsewhere).
+ */
 export function Home() {
   const [reachable, setReachable] = useState<boolean | undefined>(undefined);
-  const [scorer, setScorer] = useState<string | undefined>(undefined);
-  const { reminders, add, toggleTaken } = useMedications();
-  const [medName, setMedName] = useState('');
-  const [medTime, setMedTime] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     api
       .health()
-      .then((health) => {
-        if (cancelled) return;
-        setReachable(true);
-        setScorer(health.clinicalScorer);
+      .then(() => {
+        if (!cancelled) setReachable(true);
       })
       .catch(() => {
         if (!cancelled) setReachable(false);
@@ -29,117 +36,115 @@ export function Home() {
 
   return (
     <div className="page">
-      <div className="label" style={{ marginBottom: -6 }}>
-        {new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })}
-      </div>
-      <h1 className="serif-display fade-up">Hello.</h1>
-
       {reachable === false ? (
-        <div className="glass card" style={{ borderLeft: '4px solid var(--danger)', background: 'var(--danger-wash)' }}>
-          <div className="h3" style={{ color: 'var(--danger-deep)' }}>
-            Orchestrator unreachable
-          </div>
-          <p className="small" style={{ marginTop: 4 }}>
-            The backend at <code>{api.baseUrl}</code> did not respond. Check VITE_API_URL. First aid below still works.
-          </p>
-        </div>
-      ) : (
-        <div className="row glass card" style={{ padding: '12px 16px' }}>
-          <span className={`dot${reachable === true ? ' dot-pulse' : ''}`} style={{ background: reachable === undefined ? 'var(--faint)' : 'var(--ok)' }} />
-          <span style={{ fontWeight: 600, fontSize: 13, color: reachable === undefined ? 'var(--slate)' : 'var(--ok)' }}>
-            {reachable === undefined ? 'Checking…' : 'Connected'}
+        <div className="row glass-panel glass-panel-content fade-up" style={{ padding: '12px 16px', borderLeft: '4px solid var(--red)' }}>
+          <span className="dot" style={{ background: 'var(--red)' }} />
+          <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 12, color: 'var(--red)' }}>
+            Orchestrator unreachable — check VITE_API_URL
           </span>
-          {scorer !== undefined ? <span className="foot" style={{ marginLeft: 'auto' }}>Scoring: {scorer.replace(/_/g, ' ')}</span> : null}
         </div>
-      )}
+      ) : null}
 
-      <Link to="/emergency" className="btn btn-primary" style={{ textAlign: 'center', textDecoration: 'none' }}>
-        Start emergency triage
+      {/* Emergency button */}
+      <Link to="/emergency" className="fade-up" style={{ textDecoration: 'none' }}>
+        <div style={emergencyOuterStyle}>
+          <div style={emergencyGradientStyle} />
+          <div style={emergencyContentStyle}>
+            <div style={emergencyIconWrapStyle}>
+              <PhoneIcon size={26} />
+            </div>
+            <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 17, color: 'var(--ink)', textAlign: 'center', letterSpacing: -0.3 }}>
+              Start emergency
+            </span>
+            <div style={settingsWrapStyle}>
+              <GearIcon size={18} />
+            </div>
+          </div>
+        </div>
       </Link>
 
-      <section className="glass card">
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: 10 }}>
-          <h3 className="h3">Medication reminders</h3>
-        </div>
-        {reminders.length === 0 ? (
-          <p className="small">No reminders yet — add one below.</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {reminders.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => toggleTaken(r.id)}
-                className="row"
-                style={{
-                  justifyContent: 'space-between',
-                  border: 'none',
-                  background: 'transparent',
-                  padding: '8px 0',
-                  borderTop: '1px solid var(--divider)',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                }}
-              >
-                <div>
-                  <div style={{ fontWeight: 600, fontSize: 13 }}>{r.name}</div>
-                  <div className="small">{r.at}</div>
-                </div>
-                <span className="foot" style={{ color: r.takenToday ? 'var(--ok)' : 'var(--warn)', fontWeight: 700 }}>
-                  {r.takenToday ? 'TAKEN' : 'DUE'}
-                </span>
-              </button>
-            ))}
-          </div>
-        )}
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (medName.trim().length === 0 || medTime.trim().length === 0) return;
-            add(medName, medTime);
-            setMedName('');
-            setMedTime('');
-          }}
-          className="row"
-          style={{ marginTop: 10, gap: 8 }}
-        >
-          <input
-            value={medName}
-            onChange={(e) => setMedName(e.target.value)}
-            placeholder="Metformin 500mg"
-            style={{ flex: 1.4, minWidth: 0 }}
-            className="text-input"
-          />
-          <input
-            value={medTime}
-            onChange={(e) => setMedTime(e.target.value)}
-            placeholder="8:00 AM"
-            style={{ flex: 1, minWidth: 0 }}
-            className="text-input"
-          />
-          <button type="submit" className="btn btn-secondary" style={{ padding: '10px 14px' }}>
-            Add
-          </button>
-        </form>
-      </section>
-
-      <div className="grid-2">
-        <Link to="/first-aid" className="glass card" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <div className="label">First aid</div>
-          <div className="h3" style={{ marginTop: 6 }}>
-            Works offline
-          </div>
-        </Link>
-        <Link to="/emergency" className="glass card" style={{ textDecoration: 'none', color: 'inherit' }}>
-          <div className="label">Nearby hospitals</div>
-          <div className="h3" style={{ marginTop: 6 }}>
-            Inside Emergency
-          </div>
-        </Link>
+      <div className="fade-up" style={{ animationDelay: '60ms' }}>
+        <VitalsPanel />
       </div>
 
-      <p className="foot" style={{ textAlign: 'center', marginTop: 8 }}>
+      <div className="fade-up" style={{ animationDelay: '120ms' }}>
+        <MedicationsPanel />
+      </div>
+
+      <div className="grid-2 fade-up" style={{ animationDelay: '180ms' }}>
+        <FeatureTile icon={<BloodDropIcon />} iconBg="rgba(255,100,100,0.12)" title="Emergency" sub="Start the triage interview" to="/emergency" />
+        <FeatureTile icon={<BandageIcon />} iconBg="rgba(200,175,130,0.18)" title="First aid" sub="Works with no signal" to="/first-aid" />
+      </div>
+
+      <p className="foot" style={{ textAlign: 'center', marginTop: 4 }}>
         Decision support in a simulated environment. Not a medical device. Never diagnoses or prescribes.
       </p>
     </div>
   );
 }
+
+function FeatureTile({ icon, iconBg, title, sub, to }: { readonly icon: React.ReactNode; readonly iconBg: string; readonly title: string; readonly sub: string; readonly to: string }) {
+  return (
+    <Link to={to} className="feature-tile">
+      <div className="tile-arrow">
+        <ChevronRightSmall />
+      </div>
+      <div className="tile-icon" style={{ background: iconBg, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid rgba(255,255,255,0.6)' }}>
+        {icon}
+      </div>
+      <div className="tile-title">{title}</div>
+      <div className="tile-sub">{sub}</div>
+    </Link>
+  );
+}
+
+const emergencyOuterStyle: React.CSSProperties = {
+  position: 'relative',
+  height: 90,
+  borderRadius: 32,
+  border: '1px solid rgba(255,255,255,0.9)',
+  overflow: 'hidden',
+  boxShadow: '0 12px 32px rgba(16,42,84,0.13)',
+  backdropFilter: 'blur(40px) saturate(1.6)',
+  WebkitBackdropFilter: 'blur(40px) saturate(1.6)',
+  background: 'rgba(255,255,255,0.5)',
+};
+
+const emergencyGradientStyle: React.CSSProperties = {
+  position: 'absolute',
+  inset: 0,
+  background: 'linear-gradient(90deg, rgba(255,82,82,0.18), rgba(255,255,255,0.08), rgba(190,220,255,0.22))',
+};
+
+const emergencyContentStyle: React.CSSProperties = {
+  position: 'relative',
+  height: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  padding: '0 16px',
+  gap: 14,
+};
+
+const emergencyIconWrapStyle: React.CSSProperties = {
+  width: 58,
+  height: 58,
+  borderRadius: 29,
+  background: 'var(--red)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  border: '1px solid rgba(255,255,255,0.5)',
+  flex: 'none',
+};
+
+const settingsWrapStyle: React.CSSProperties = {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  background: 'rgba(255,255,255,0.4)',
+  border: '1px solid rgba(255,255,255,0.7)',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flex: 'none',
+};
