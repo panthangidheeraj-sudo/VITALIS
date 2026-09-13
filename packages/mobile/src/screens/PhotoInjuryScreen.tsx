@@ -20,10 +20,17 @@
  * "No vision model is enabled on this account", which was true when it was
  * drawn and is not true now — Gemini is live. A screen that tells you a working
  * feature is broken trains you to ignore it when it really is.
+ *
+ * THE CAMERA IS REAL. `expo-image-picker` requests camera permission and
+ * launches the native camera; a denied permission is reported on screen
+ * rather than silently falling back to a placeholder image — a photo screen
+ * that pretends it captured something when it did not is worse than one that
+ * says the camera is not available right now.
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { api } from '../api/client';
 import { BackLink, Glass, Label, NoticeCard, PrimaryButton, SecondaryButton } from '../ui/primitives';
 import { colors, fonts, radius, spacing, type } from '../theme';
@@ -36,7 +43,7 @@ interface Props {
 
 type Status =
   | { readonly kind: 'idle' }
-  | { readonly kind: 'selected'; readonly ref: string }
+  | { readonly kind: 'selected'; readonly ref: string; readonly uri: string }
   | { readonly kind: 'sending' }
   | { readonly kind: 'sent' }
   | { readonly kind: 'failed'; readonly message: string };
@@ -60,11 +67,32 @@ export function PhotoInjuryScreen({ onBack, onSubmit }: Props) {
     };
   }, []);
 
-  const pick = useCallback(() => {
-    // expo-image-picker is not installed, so there is no camera path yet. This
-    // stands in for one WITHOUT pretending a picture was taken — a fake
-    // thumbnail here would be the start of a fake assessment.
-    setStatus({ kind: 'selected', ref: 'photo_placeholder_ref' });
+  const pick = useCallback(async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      setStatus({
+        kind: 'failed',
+        message: 'Camera permission was not granted. Enable it in your phone\'s Settings to take a photo.',
+      });
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      base64: true,
+      quality: 0.6,
+      // A single still, not a multi-shot session — this attaches ONE
+      // observation to the case, per the screen's own framing above.
+      allowsEditing: false,
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    const asset = result.assets[0]!;
+    if (asset.base64 === undefined || asset.base64 === null) {
+      setStatus({ kind: 'failed', message: 'Could not read the photo. Try again.' });
+      return;
+    }
+    // The server's vision adapter takes a base64 data URL, not a bare
+    // reference — see api/client.ts's `submitPhoto` comment.
+    const dataUrl = `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}`;
+    setStatus({ kind: 'selected', ref: dataUrl, uri: asset.uri });
   }, []);
 
   const send = useCallback(async () => {
@@ -97,14 +125,16 @@ export function PhotoInjuryScreen({ onBack, onSubmit }: Props) {
             <ActivityIndicator color={colors.brand} />
             <Text style={styles.viewfinderHint}>Describing what is visible…</Text>
           </>
+        ) : status.kind === 'selected' ? (
+          <Image source={{ uri: status.uri }} style={styles.preview} />
+        ) : status.kind === 'sent' ? (
+          <Text style={styles.viewfinderHint}>Photo sent</Text>
         ) : (
           <>
             <Label color="#5b6b83" style={{ letterSpacing: 0.6 }}>
-              CAMERA VIEWFINDER
+              CAMERA
             </Label>
-            <Text style={styles.viewfinderHint}>
-              {status.kind === 'idle' ? 'No photo selected yet' : 'Photo ready to send'}
-            </Text>
+            <Text style={styles.viewfinderHint}>No photo taken yet</Text>
           </>
         )}
       </View>
@@ -157,8 +187,8 @@ export function PhotoInjuryScreen({ onBack, onSubmit }: Props) {
 
       <View style={styles.buttonRow}>
         <SecondaryButton
-          label={status.kind === 'idle' ? 'Choose a photo' : 'Choose a different one'}
-          onPress={pick}
+          label={status.kind === 'idle' ? 'Take a photo' : 'Take a different one'}
+          onPress={() => void pick()}
           style={{ flex: 1 }}
         />
         <PrimaryButton
@@ -168,12 +198,6 @@ export function PhotoInjuryScreen({ onBack, onSubmit }: Props) {
           style={{ flex: 1 }}
         />
       </View>
-
-      {/* Stated plainly rather than left for someone to discover. */}
-      <Text style={styles.note}>
-        The camera is not wired up in this build — the button above stands in for it so the rest of
-        the path can be shown end to end.
-      </Text>
     </View>
   );
 }
@@ -190,7 +214,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
+    overflow: 'hidden',
   },
+  preview: { width: '100%', height: '100%' },
   viewfinderHint: { fontFamily: fonts.sans, fontSize: 11, color: colors.label },
   card: { padding: spacing.xl, borderRadius: radius.lg },
   liveRow: {
@@ -206,5 +232,4 @@ const styles = StyleSheet.create({
   },
   liveDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: colors.ok },
   buttonRow: { flexDirection: 'row', gap: spacing.md },
-  note: { ...type.foot, textAlign: 'center' },
 });

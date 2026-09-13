@@ -17,7 +17,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { api } from '../api/client';
-import { DEMO_DEMOGRAPHICS, DEMO_EMERGENCY_CARD } from '../data/demoProfile';
+import { useProfile } from '../data/profileStore';
 import { useAuth } from '../firebase/useAuth';
 import { VitalsPanel } from '../components/VitalsPanel';
 import { MedicationsPanel } from '../components/MedicationsPanel';
@@ -30,9 +30,8 @@ interface Props {
   readonly onOpenFirstAid: () => void;
   readonly onOpenEmergencyCard: () => void;
   readonly onOpenLanguage: () => void;
-  readonly onOpenQr: () => void;
   readonly onOpenMedicine: () => void;
-  readonly onOpenSilent: () => void;
+  readonly onOpenProfile: () => void;
 }
 
 export function HomeScreen({
@@ -40,13 +39,13 @@ export function HomeScreen({
   onOpenFirstAid,
   onOpenEmergencyCard,
   onOpenLanguage,
-  onOpenQr,
   onOpenMedicine,
-  onOpenSilent,
+  onOpenProfile,
 }: Props) {
   const [reachable, setReachable] = useState<boolean | undefined>(undefined);
   const [scorer, setScorer] = useState<string | undefined>(undefined);
   const auth = useAuth();
+  const { profile, loading: profileLoading } = useProfile();
 
   useEffect(() => {
     let cancelled = false;
@@ -65,7 +64,8 @@ export function HomeScreen({
     };
   }, []);
 
-  const initials = (DEMO_DEMOGRAPHICS.displayName ?? 'You')
+  const name = profileLoading || profile.displayName.trim().length === 0 ? 'You' : profile.displayName;
+  const initials = name
     .split(' ')
     .map((part) => part.charAt(0))
     .join('')
@@ -80,12 +80,12 @@ export function HomeScreen({
         <View style={{ flex: 1 }}>
           <Label style={{ marginBottom: 7 }}>{today()}</Label>
           <Text style={type.serifDisplay}>
-            {`Hello, ${(DEMO_DEMOGRAPHICS.displayName ?? 'there').split(' ')[0]}`}
+            {`Hello, ${profileLoading || profile.displayName.trim().length === 0 ? 'there' : profile.displayName.split(' ')[0]}`}
           </Text>
         </View>
-        <View style={styles.avatar}>
+        <Pressable onPress={onOpenProfile} style={styles.avatar}>
           <Text style={styles.avatarText}>{initials}</Text>
-        </View>
+        </Pressable>
       </View>
 
       {/* Connection state. The unreachable case names the actual cause, because
@@ -123,16 +123,13 @@ export function HomeScreen({
 
       <MedicationsPanel />
 
-      {/* The quick actions. The design shows two; this adds the QR card, the
-          medicine scanner and silent distress, which exist in this build and
-          had no slot in the design. They are grouped here rather than given tabs
-          because none of them is somewhere you go — they are things you reach
-          for once. */}
+      {/* The quick actions. Grouped here rather than given tabs because none
+          of them is somewhere you go — they are things you reach for once. */}
       <View style={styles.grid}>
         {/* Hierarchy (P2 #7): the two cards a responder — or the user under
             duress — reaches for FIRST get an icon, a coloured accent bar and a
-            bolder title. The other four are equally functional, just quieter,
-            because treating six unrelated actions as equally urgent is itself
+            bolder title. The other three are equally functional, just quieter,
+            because treating five unrelated actions as equally urgent is itself
             what "no hierarchy" looks like. */}
         <QuickAction
           icon="🩸"
@@ -142,13 +139,12 @@ export function HomeScreen({
           onPress={onOpenEmergencyCard}
         />
         <QuickAction
-          icon="🔇"
-          title="Silent distress"
-          sub="Disguises as a calculator, shares your location"
+          icon="👤"
+          title="Profile"
+          sub="Your details and emergency contacts"
           emphasis
-          onPress={onOpenSilent}
+          onPress={onOpenProfile}
         />
-        <QuickAction icon="◱" title="Lock-screen QR" sub="Scannable by a responder" onPress={onOpenQr} />
         <QuickAction icon="💊" title="Medicine scanner" sub="Expiry, dose, what it is" onPress={onOpenMedicine} />
         <QuickAction icon="🩹" title="First aid" sub="Works with no signal" onPress={onOpenFirstAid} />
         <QuickAction icon="🌐" title="Language" sub="English · हिन्दी · తెలుగు · தமிழ்" onPress={onOpenLanguage} />
@@ -186,9 +182,11 @@ export function HomeScreen({
       <Text style={styles.disclaimer}>
         {`Decision support in a simulated environment.\nNot a medical device. Never diagnoses or prescribes.`}
       </Text>
-      <Text style={styles.cardMeta}>
-        {`Emergency card last updated ${new Date(DEMO_EMERGENCY_CARD.updatedAt).toLocaleDateString()}`}
-      </Text>
+      {!profileLoading && profile.updatedAt !== undefined ? (
+        <Text style={styles.cardMeta}>
+          {`Emergency card last updated ${new Date(profile.updatedAt).toLocaleDateString()}`}
+        </Text>
+      ) : null}
     </View>
   );
 }

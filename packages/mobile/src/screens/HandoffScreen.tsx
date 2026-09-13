@@ -29,7 +29,7 @@ import type { CaseId, CaseState } from '@triage/shared';
 import { HANDOFF_DISCLAIMER, deriveClinicalFields } from '@triage/shared';
 import { useCaseState } from '../firebase/useCaseState';
 import { isFirebaseConfigured } from '../firebase/client';
-import { DEMO_DEMOGRAPHICS, DEMO_EMERGENCY_CARD } from '../data/demoProfile';
+import { useProfile } from '../data/profileStore';
 import { clockTime } from '../state/caseView';
 import { BackLink, Glass, Label, NoticeCard, Stat, TimelineStrip } from '../ui/primitives';
 import { colors, fonts, radius, shadow, spacing, tierColor, tierLabel, type } from '../theme';
@@ -42,6 +42,7 @@ interface Props {
 export function HandoffScreen({ caseId, onBack }: Props) {
   const live = useCaseState(isFirebaseConfigured() ? caseId : undefined);
   const state = live.caseState;
+  const { profile } = useProfile();
 
   if (state === undefined) {
     return (
@@ -75,7 +76,7 @@ export function HandoffScreen({ caseId, onBack }: Props) {
         <Label color="rgba(255,255,255,0.8)">CLINICAL HANDOFF</Label>
         <Text style={styles.heroTitle}>{tierLabel[derived.riskTier]}</Text>
         <Text style={styles.heroSub}>
-          {`${derived.triageLevel.replace(/_/g, ' ')} · ${DEMO_DEMOGRAPHICS.displayName ?? 'Patient'}, ${
+          {`${derived.triageLevel.replace(/_/g, ' ')} · ${profile.displayName.trim().length > 0 ? profile.displayName : 'Patient'}, ${
             state.demographics.ageYears
           }, ${state.demographics.sex}`}
         </Text>
@@ -137,23 +138,19 @@ export function HandoffScreen({ caseId, onBack }: Props) {
       <Glass tone="blue" contentStyle={styles.card}>
         <Label>ALLERGIES</Label>
         <Text style={styles.allergies}>
-          {DEMO_EMERGENCY_CARD.allergies.join(' · ') || 'None reported'}
+          {profile.allergies.join(' · ') || 'None reported'}
         </Text>
 
         <Label style={{ marginTop: 15 }}>MEDICATIONS</Label>
-        <Text style={styles.meds}>
-          {DEMO_EMERGENCY_CARD.medications
-            .map((m) => m.normalizedName ?? m.reportedName)
-            .join(' · ') || 'None reported'}
-        </Text>
+        <Text style={styles.meds}>{profile.medications.join(' · ') || 'None reported'}</Text>
         <Text style={[type.foot, { marginTop: 6 }]}>
-          Names normalised via RxNorm. Interaction checking is NOT available in this system — the
+          As entered on the profile. Interaction checking is NOT available in this system — the
           RxNav interaction endpoint was retired in January 2024.
         </Text>
 
         <Label style={{ marginTop: 15 }}>CHRONIC CONDITIONS</Label>
         <Text style={styles.meds}>
-          {DEMO_EMERGENCY_CARD.chronicConditions.join(' · ') || 'None reported'}
+          {profile.chronicConditions.join(' · ') || 'None reported'}
         </Text>
       </Glass>
 

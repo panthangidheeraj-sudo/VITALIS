@@ -15,7 +15,7 @@
  * ────────────────────────────────────────────────────────────────────────────
  */
 
-import type { BiologicalSex, CaseId, Language, RiskTier, RoutingDecision } from '@triage/shared';
+import type { BiologicalSex, CaseId, Hospital, Language, RiskTier, RoutingDecision } from '@triage/shared';
 
 /**
  * MUST be dot-notation, `process.env.EXPO_PUBLIC_API_URL` — not
@@ -293,4 +293,14 @@ export const api = {
   /** RxNorm name normalisation. Never returns interaction data - see the route. */
   normalizeMedications: (names: readonly string[]) =>
     request<MedicationLookup>('/medications/normalize', { names }),
+
+  /**
+   * Nearby hospitals (5.3 UI) - a thin pass-through to `tools.hospitals.findNearby`.
+   * See `packages/server/src/routes/hospitals.ts` for the provenance split
+   * between real OSM fields and the simulated bed/specialty overlay.
+   */
+  nearbyHospitals: (lat: number, lng: number, radiusKm = 10, limit = 5) =>
+    request<{ hospitals: readonly Hospital[] }>(
+      `/hospitals/nearby?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}&limit=${limit}`,
+    ),
 };

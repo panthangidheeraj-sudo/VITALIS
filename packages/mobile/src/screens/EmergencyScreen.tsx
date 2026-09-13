@@ -27,10 +27,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { CaseId } from '@triage/shared';
 import { HoldDial } from '../components/HoldDial';
+import { HospitalsPanel } from '../components/HospitalsPanel';
 import { QUICK_SELECT_OPTIONS } from '../data/quickSelectTags';
 import { api, ApiError, type CaseSummary, type TurnResponse } from '../api/client';
-import { DEMO_DEMOGRAPHICS } from '../data/demoProfile';
-import { demoNotifiableContacts } from '../data/notifiableContacts';
+import { FALLBACK_DEMOGRAPHICS, useProfile } from '../data/profileStore';
+import { toNotifiableContacts } from '../data/notifiableContacts';
 import { reportLocationOnce } from '../location/reportLocation';
 import { useCaseState } from '../firebase/useCaseState';
 import { isFirebaseConfigured } from '../firebase/client';
@@ -76,6 +77,7 @@ export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto, op
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [guardianEnabled, setGuardianEnabled] = useState(true);
+  const { profile } = useProfile();
 
   const live = useCaseState(isFirebaseConfigured() ? caseId : undefined);
   const state = live.caseState;
@@ -114,8 +116,13 @@ export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto, op
     }
 
     let cancelled = false;
+    // Real profile if the user has set one up; a neutral technical fallback
+    // otherwise (never shown as though it were the user's data — see
+    // `data/profileStore.ts`).
+    const ageYears = profile.ageYears > 0 ? profile.ageYears : FALLBACK_DEMOGRAPHICS.ageYears;
+    const sex = profile.ageYears > 0 ? profile.sex : FALLBACK_DEMOGRAPHICS.sex;
     resolveOwnerUid()
-      .then((ownerUid) => api.createCase({ ownerUid, ageYears: 52, sex: 'male' }))
+      .then((ownerUid) => api.createCase({ ownerUid, ageYears, sex }))
       .then((created) => {
         if (cancelled) return;
         setCaseId(created.caseId);
@@ -128,6 +135,10 @@ export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto, op
     return () => {
       cancelled = true;
     };
+    // Deliberately excludes `profile`: this must run exactly once per case,
+    // not re-fire (and create a second case) when the profile finishes
+    // loading a tick later.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openCaseId]);
 
   /** Escalation is an outcome, not an error — it gets its own screen (§1). */
@@ -179,8 +190,8 @@ export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto, op
       setError(undefined);
       try {
         const result = await api.confirm(caseId, heldMs, {
-          contacts: demoNotifiableContacts(),
-          patientName: DEMO_DEMOGRAPHICS.displayName ?? 'Your contact',
+          contacts: toNotifiableContacts(profile.contacts),
+          patientName: profile.displayName.trim().length > 0 ? profile.displayName : 'Your contact',
           shareLocation: true,
         });
         setSummary(result);
@@ -191,7 +202,7 @@ export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto, op
         setBusy(false);
       }
     },
-    [caseId, onDispatched],
+    [caseId, onDispatched, profile],
   );
 
   if (caseId === undefined || view === undefined) {
@@ -372,6 +383,8 @@ export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto, op
           </Glass>
         )}
       </Pressable>
+
+      <HospitalsPanel />
 
       {/* The ledger. Real rows from Firestore, so "LIVE" is a checkable claim. */}
       <LedgerPanel rows={view.ledger} />

@@ -26,7 +26,7 @@ import type { CaseId } from '@triage/shared';
 import { useCaseState } from '../firebase/useCaseState';
 import { isFirebaseConfigured } from '../firebase/client';
 import { clockTime } from '../state/caseView';
-import { DEMO_CONTACTS } from '../data/demoProfile';
+import { useProfile } from '../data/profileStore';
 import { BackLink, DangerOutlineButton, Glass, Label } from '../ui/primitives';
 import { colors, escalateWash, fonts, radius, shadow, spacing, type } from '../theme';
 
@@ -54,7 +54,8 @@ export function EscalatedScreen({ caseId, onBack, onRequestAmbulance }: Props) {
   const live = useCaseState(isFirebaseConfigured() ? caseId : undefined);
   const state = live.caseState;
   const escalation = state?.escalation;
-  const primary = DEMO_CONTACTS.find((c) => c.isPrimary);
+  const { profile } = useProfile();
+  const primary = profile.contacts.find((c) => c.isPrimary);
 
   const reason =
     escalation?.reason === undefined

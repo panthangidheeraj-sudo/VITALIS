@@ -1,12 +1,6 @@
 /**
- * Adapts the demo profile's contacts into the shape the server's notification
- * layer takes.
- *
- * Kept as a separate file rather than changing `demoProfile.ts`, because that
- * file is the stand-in for a real profile editor and is staying as-is by
- * instruction. When the profile is persisted to `patients/{uid}`, this function
- * is what gets deleted - the stored contacts will already carry these fields
- * because `EmergencyContact` in @triage/shared declares them.
+ * Adapts the real, user-entered profile contacts into the shape the server's
+ * notification layer takes.
  *
  * THE DEFAULTS HERE ARE DELIBERATE AND CONSERVATIVE:
  *
@@ -22,12 +16,12 @@
  *    everybody would hand a neighbour the medical interview.
  */
 
-import { DEMO_CONTACTS } from './demoProfile';
+import type { ProfileContact } from './profileStore';
 import type { NotifiableContact } from '../api/client';
 
-export function demoNotifiableContacts(): readonly NotifiableContact[] {
-  return DEMO_CONTACTS.map((contact, index) => ({
-    id: `contact_${index}`,
+export function toNotifiableContacts(contacts: readonly ProfileContact[]): readonly NotifiableContact[] {
+  return contacts.map((contact, index) => ({
+    id: contact.id,
     name: contact.name,
     relationship: contact.relationship,
     phoneE164: contact.phone,

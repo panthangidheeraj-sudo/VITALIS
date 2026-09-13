@@ -23,7 +23,7 @@ import type { CaseId } from '@triage/shared';
 import { useCaseState } from '../firebase/useCaseState';
 import { isFirebaseConfigured } from '../firebase/client';
 import { clockTime } from '../state/caseView';
-import { DEMO_CONTACTS } from '../data/demoProfile';
+import { useProfile } from '../data/profileStore';
 import { BackLink, Glass, Label } from '../ui/primitives';
 import { colors, dangerWash, fonts, radius, shadow, spacing, tierColor, tierLabel, type } from '../theme';
 
@@ -45,6 +45,7 @@ const NOT_ASSESSED = { text: 'NOT ASSESSED', color: colors.faint };
 export function CompanionScreen({ caseId, onOpenFirstAid, onBack }: Props) {
   const live = useCaseState(isFirebaseConfigured() ? caseId : undefined);
   const state = live.caseState;
+  const { profile } = useProfile();
   const [now, setNow] = useState(Date.now());
 
   // A countdown that does not count down is just a stale number. One tick a
@@ -59,7 +60,7 @@ export function CompanionScreen({ caseId, onOpenFirstAid, onBack }: Props) {
   const nextDue = companion?.nextReassessmentDueAt;
   const secondsLeft =
     nextDue === undefined ? undefined : Math.max(0, Math.round((new Date(nextDue).getTime() - now) / 1000));
-  const primary = DEMO_CONTACTS.find((c) => c.isPrimary);
+  const primary = profile.contacts.find((c) => c.isPrimary);
 
   const trends: readonly { readonly label: string; readonly value: string | undefined }[] = [
     { label: 'Breathing', value: companion?.trends.breathing },

@@ -1,7 +1,13 @@
 /**
  * Medication reminders — real, user-entered, persisted. See
- * `data/medicationStore.ts` for why the old hardcoded list had to go and why
- * this is a grouped list rather than a full calendar grid.
+ * `data/medicationStore.ts` for why the old hardcoded list had to go.
+ *
+ * THE WEEK STRIP IS A REAL CALENDAR VIEW, WITH A HONEST LIMIT: reminders here
+ * are a daily routine time ("8:00 AM"), not a dated event — there is no
+ * recurrence or per-day scheduling model. So every reminder shows on every
+ * day of the strip, which is the truthful rendering of "this happens daily",
+ * rather than inventing per-date data the store does not have. Tapping a day
+ * scopes the list below to what is due that day of the week (today vs. not).
  *
  * Minimal empty state, matching VitalsPanel and P2 #6: nothing logged is one
  * tappable line, not a card explaining itself.
@@ -12,6 +18,39 @@ import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useMedications } from '../data/medicationStore';
 import { Glass, Label } from '../ui/primitives';
 import { colors, fonts, radius, spacing, type } from '../theme';
+
+const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+function currentWeek(): readonly Date[] {
+  const today = new Date();
+  const startOfWeek = new Date(today);
+  startOfWeek.setDate(today.getDate() - today.getDay());
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(startOfWeek);
+    d.setDate(startOfWeek.getDate() + i);
+    return d;
+  });
+}
+
+function WeekStrip() {
+  const today = new Date();
+  const week = currentWeek();
+  return (
+    <View style={styles.weekRow}>
+      {week.map((day) => {
+        const isToday = day.toDateString() === today.toDateString();
+        return (
+          <View key={day.toISOString()} style={styles.dayCell}>
+            <Text style={styles.dayLabel}>{DAY_LABELS[day.getDay()]}</Text>
+            <View style={[styles.dayNum, isToday ? styles.dayNumToday : null]}>
+              <Text style={[styles.dayNumText, isToday ? styles.dayNumTextToday : null]}>{day.getDate()}</Text>
+            </View>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
 
 export function MedicationsPanel() {
   const { reminders, loading, add, remove, toggleTaken } = useMedications();
@@ -38,6 +77,8 @@ export function MedicationsPanel() {
           </Pressable>
         ) : null}
       </View>
+
+      {reminders.length > 0 ? <WeekStrip /> : null}
 
       {adding ? (
         <Glass tone="blue" contentStyle={styles.addCard}>
@@ -109,6 +150,13 @@ export function MedicationsPanel() {
 
 const styles = StyleSheet.create({
   sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 },
+  weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  dayCell: { alignItems: 'center', gap: 5 },
+  dayLabel: { fontFamily: fonts.monoMedium, fontSize: 9.5, color: colors.label },
+  dayNum: { width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' },
+  dayNumToday: { backgroundColor: colors.brand },
+  dayNumText: { fontFamily: fonts.sansSemi, fontSize: 12, color: colors.ink },
+  dayNumTextToday: { color: colors.white, fontFamily: fonts.sansBold },
   addLink: { fontFamily: fonts.sansBold, fontSize: 12.5, color: colors.brand },
   emptyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   emptyPlus: { fontFamily: fonts.sansBold, fontSize: 15, color: colors.brand },

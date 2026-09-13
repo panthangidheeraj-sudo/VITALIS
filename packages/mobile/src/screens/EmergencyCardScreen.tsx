@@ -12,19 +12,39 @@
  * Everything else on the screen is deliberately quieter than those two.
  * ---------------------------------------------------------------------------
  *
- * It opens with no network and no passcode. All of it is device-local, which is
- * also why it is still demo data — the profile editor is not built yet, and the
- * screen says so rather than implying a responder is reading something the user
- * entered.
+ * It opens with no network and no passcode. All of it is device-local, read
+ * from `profileStore.ts` — what is on this card is exactly what the user
+ * entered on the Profile screen, nothing invented.
  */
 
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
-import { DEMO_CONTACTS, DEMO_DEMOGRAPHICS, DEMO_EMERGENCY_CARD } from '../data/demoProfile';
-import { BackLink, Glass, Label } from '../ui/primitives';
+import { useProfile } from '../data/profileStore';
+import { BackLink, Glass, Label, PrimaryButton } from '../ui/primitives';
 import { colors, fonts, radius, shadow, spacing, type } from '../theme';
 
-export function EmergencyCardScreen({ onBack }: { readonly onBack: () => void }) {
-  const card = DEMO_EMERGENCY_CARD;
+export function EmergencyCardScreen({
+  onBack,
+  onOpenProfile,
+}: {
+  readonly onBack: () => void;
+  readonly onOpenProfile: () => void;
+}) {
+  const { profile, loading, isComplete } = useProfile();
+
+  if (loading) return null;
+
+  if (!isComplete) {
+    return (
+      <View style={styles.root}>
+        <BackLink onPress={onBack} />
+        <Text style={type.h1}>Emergency card</Text>
+        <Text style={[type.small, { marginTop: -6 }]}>
+          Nothing set up yet — this card is built from your profile.
+        </Text>
+        <PrimaryButton label="Set up your profile" onPress={onOpenProfile} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.root}>
@@ -43,43 +63,44 @@ export function EmergencyCardScreen({ onBack }: { readonly onBack: () => void })
         <View style={styles.heroRow}>
           <View>
             <Label>BLOOD GROUP</Label>
-            <Text style={styles.bloodGroup}>{card.bloodGroup ?? '—'}</Text>
+            <Text style={styles.bloodGroup}>{profile.bloodGroup || '—'}</Text>
           </View>
           <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.name}>{DEMO_DEMOGRAPHICS.displayName ?? 'Unnamed'}</Text>
+            <Text style={styles.name}>{profile.displayName}</Text>
             <Text style={[type.small, { marginTop: 2 }]}>
-              {`${DEMO_DEMOGRAPHICS.ageYears} · ${DEMO_DEMOGRAPHICS.sex}`}
+              {`${profile.ageYears} · ${profile.sex}`}
             </Text>
-            {card.organDonor === true ? <Text style={styles.donor}>ORGAN DONOR</Text> : null}
+            {profile.organDonor ? <Text style={styles.donor}>ORGAN DONOR</Text> : null}
           </View>
         </View>
 
         <View style={styles.allergyBlock}>
           <Label>ALLERGIES</Label>
           <Text style={styles.allergies}>
-            {card.allergies.length === 0 ? 'None known' : card.allergies.join('\n')}
+            {profile.allergies.length === 0 ? 'None known' : profile.allergies.join('\n')}
           </Text>
         </View>
       </Glass>
 
       <Glass tone="plain" contentStyle={styles.card}>
         <Label>MEDICATIONS</Label>
-        <Text style={styles.listText}>
-          {card.medications.map((m) => m.reportedName).join('\n') || 'None'}
-        </Text>
+        <Text style={styles.listText}>{profile.medications.join('\n') || 'None'}</Text>
         <Text style={[type.foot, { marginTop: 7 }]}>
-          RxNorm-normalised names only. Interactions are NOT checked — the RxNav interaction
+          As entered on your profile. Interactions are NOT checked — the RxNav interaction
           endpoint was retired in January 2024.
         </Text>
 
         <Label style={{ marginTop: 16 }}>CHRONIC CONDITIONS</Label>
-        <Text style={styles.listText}>{card.chronicConditions.join(' · ') || 'None recorded'}</Text>
+        <Text style={styles.listText}>{profile.chronicConditions.join(' · ') || 'None recorded'}</Text>
       </Glass>
 
       <Glass tone="plain" contentStyle={styles.contactCard}>
         <Label style={{ paddingTop: 12, paddingBottom: 4 }}>EMERGENCY CONTACTS</Label>
-        {DEMO_CONTACTS.map((contact) => (
-          <View key={contact.phone} style={styles.contactRow}>
+        {profile.contacts.length === 0 ? (
+          <Text style={[type.small, { paddingBottom: 12 }]}>None added yet.</Text>
+        ) : null}
+        {profile.contacts.map((contact) => (
+          <View key={contact.id} style={styles.contactRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.contactName}>
                 {contact.name}
@@ -104,22 +125,21 @@ export function EmergencyCardScreen({ onBack }: { readonly onBack: () => void })
         ))}
       </Glass>
 
-      {card.notes === undefined ? null : (
+      {profile.notes.length === 0 ? null : (
         <Glass tone="plain" contentStyle={styles.card}>
           <Label>NOTES FOR RESPONDERS</Label>
-          <Text style={styles.notes}>{card.notes}</Text>
-          <Text style={[type.foot, { marginTop: 9 }]}>
-            {`Updated ${new Date(card.updatedAt).toLocaleString()}`}
-          </Text>
+          <Text style={styles.notes}>{profile.notes}</Text>
+          {profile.updatedAt !== undefined ? (
+            <Text style={[type.foot, { marginTop: 9 }]}>
+              {`Updated ${new Date(profile.updatedAt).toLocaleString()}`}
+            </Text>
+          ) : null}
         </Glass>
       )}
 
-      {/* Said plainly rather than implied. A responder must not assume the
-          patient typed this. */}
-      <Text style={styles.sampleNote}>
-        This card is sample data. The profile editor is not built yet, so nothing here was entered
-        by the person holding the phone.
-      </Text>
+      <Pressable onPress={onOpenProfile}>
+        <Text style={styles.sampleNote}>Edit your profile →</Text>
+      </Pressable>
     </View>
   );
 }

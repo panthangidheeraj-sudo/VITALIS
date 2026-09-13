@@ -23,7 +23,13 @@
     },
     "plugins": [
       "expo-web-browser",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Vitalis uses the camera to add a photo of a visible injury to your case."
+        }
+      ]
     ]
   }
 }

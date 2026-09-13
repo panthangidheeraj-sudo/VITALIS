@@ -51,7 +51,6 @@ import { AssistantScreen } from './src/screens/AssistantScreen';
 import { CancelledScreen } from './src/screens/CancelledScreen';
 import { CompanionScreen } from './src/screens/CompanionScreen';
 import { EmergencyCardScreen } from './src/screens/EmergencyCardScreen';
-import { EmergencyQrScreen } from './src/screens/EmergencyQrScreen';
 import { EmergencyScreen } from './src/screens/EmergencyScreen';
 import { EscalatedScreen } from './src/screens/EscalatedScreen';
 import { FirstAidScreen } from './src/screens/FirstAidScreen';
@@ -60,7 +59,7 @@ import { HomeScreen } from './src/screens/HomeScreen';
 import { LanguageScreen } from './src/screens/LanguageScreen';
 import { MedicineScannerScreen } from './src/screens/MedicineScannerScreen';
 import { PhotoInjuryScreen } from './src/screens/PhotoInjuryScreen';
-import { SilentDistressScreen } from './src/screens/SilentDistressScreen';
+import { ProfileScreen } from './src/screens/ProfileScreen';
 import { TrackingScreen } from './src/screens/TrackingScreen';
 
 import { CountdownAlarm } from './src/components/CountdownAlarm';
@@ -96,9 +95,8 @@ type ScreenState =
   | { readonly name: 'photo'; readonly caseId?: CaseId }
   | { readonly name: 'escalated'; readonly caseId: CaseId }
   | { readonly name: 'cancelled' }
-  | { readonly name: 'qr' }
   | { readonly name: 'medicine' }
-  | { readonly name: 'silent' };
+  | { readonly name: 'profile' };
 
 /**
  * Seconds to cancel an AUTOMATIC alert before it escalates.
@@ -186,29 +184,6 @@ function AppShell() {
             ? 'emergency'
             : 'none';
 
-  /**
-   * Silent Distress renders OUTSIDE the Vitalis shell, deliberately.
-   *
-   * Its entire job is to look like a plain calculator to someone standing next
-   * to the user. Wrapping it in the app's blue gradient and a tab bar labelled
-   * "Emergency" would defeat the feature completely — so it replaces the shell
-   * rather than sitting inside it, and it keeps its own dark status bar.
-   */
-  if (screen.name === 'silent') {
-    return (
-      <SafeAreaView style={styles.disguise}>
-        <StatusBar barStyle="light-content" backgroundColor="#1C1C1E" />
-        <SilentDistressScreen
-          onSharePing={() => {
-            // Deliberately silent: no toast, no visible log. The adversary in
-            // this mode is standing next to them.
-          }}
-          onExit={() => setScreen({ name: 'home' })}
-        />
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor="#eef3fa" />
@@ -227,9 +202,8 @@ function AppShell() {
             onOpenFirstAid={() => setScreen({ name: 'firstAid' })}
             onOpenEmergencyCard={() => setScreen({ name: 'emergencyCard' })}
             onOpenLanguage={() => setScreen({ name: 'language' })}
-            onOpenQr={() => setScreen({ name: 'qr' })}
             onOpenMedicine={() => setScreen({ name: 'medicine' })}
-            onOpenSilent={() => setScreen({ name: 'silent' })}
+            onOpenProfile={() => setScreen({ name: 'profile' })}
           />
         ) : null}
 
@@ -278,7 +252,14 @@ function AppShell() {
         ) : null}
 
         {screen.name === 'emergencyCard' ? (
-          <EmergencyCardScreen onBack={() => setScreen({ name: 'home' })} />
+          <EmergencyCardScreen
+            onBack={() => setScreen({ name: 'home' })}
+            onOpenProfile={() => setScreen({ name: 'profile' })}
+          />
+        ) : null}
+
+        {screen.name === 'profile' ? (
+          <ProfileScreen onBack={() => setScreen({ name: 'home' })} />
         ) : null}
 
         {screen.name === 'language' ? (
@@ -320,10 +301,6 @@ function AppShell() {
           />
         ) : null}
 
-        {screen.name === 'qr' ? (
-          <EmergencyQrScreen onBack={() => setScreen({ name: 'home' })} />
-        ) : null}
-
         {screen.name === 'medicine' ? (
           <MedicineScannerScreen onBack={() => setScreen({ name: 'home' })} />
         ) : null}
@@ -349,6 +326,4 @@ function AppShell() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#eef3fa' },
-  /** The calculator's own background. Nothing Vitalis-coloured may show. */
-  disguise: { flex: 1, backgroundColor: '#1C1C1E' },
 });

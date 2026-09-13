@@ -66,8 +66,8 @@ import { Label, PrimaryButton } from '../ui/primitives';
 import { Wordmark } from '../ui/Chrome';
 import { useAssistantChat } from '../state/assistantChat';
 import { api, ApiError, type TurnResponse } from '../api/client';
-import { DEMO_DEMOGRAPHICS } from '../data/demoProfile';
-import { demoNotifiableContacts } from '../data/notifiableContacts';
+import { FALLBACK_DEMOGRAPHICS, useProfile } from '../data/profileStore';
+import { toNotifiableContacts } from '../data/notifiableContacts';
 import { reportLocationOnce } from '../location/reportLocation';
 import { resolveOwnerUid } from '../identity';
 import { useCaseState } from '../firebase/useCaseState';
@@ -125,6 +125,7 @@ export function AssistantScreen({
   const { messages, setMessages, draft, setDraft, caseId, setCaseId } = useAssistantChat();
   const scroller = useRef<ScrollView>(null);
   const [busy, setBusy] = useState(false);
+  const { profile } = useProfile();
 
   const live = useCaseState(isFirebaseConfigured() ? caseId : undefined);
   const state = live.caseState;
@@ -154,11 +155,15 @@ export function AssistantScreen({
   /** Opens the case this conversation needs, once, the first time it needs one. */
   const openCase = useCallback(async (): Promise<CaseId> => {
     const ownerUid = await resolveOwnerUid();
-    const created = await api.createCase({ ownerUid, ageYears: 52, sex: 'male' });
+    // Real profile if set up; otherwise a neutral technical fallback — see
+    // `data/profileStore.ts`.
+    const ageYears = profile.ageYears > 0 ? profile.ageYears : FALLBACK_DEMOGRAPHICS.ageYears;
+    const sex = profile.ageYears > 0 ? profile.sex : FALLBACK_DEMOGRAPHICS.sex;
+    const created = await api.createCase({ ownerUid, ageYears, sex });
     setCaseId(created.caseId);
     void reportLocationOnce(created.caseId);
     return created.caseId;
-  }, [setCaseId]);
+  }, [profile, setCaseId]);
 
   const applyTurn = useCallback(
     (result: TurnResponse) => {
@@ -242,8 +247,8 @@ export function AssistantScreen({
       setBusy(true);
       try {
         await api.confirm(caseId, heldMs, {
-          contacts: demoNotifiableContacts(),
-          patientName: DEMO_DEMOGRAPHICS.displayName ?? 'Your contact',
+          contacts: toNotifiableContacts(profile.contacts),
+          patientName: profile.displayName.trim().length > 0 ? profile.displayName : 'Your contact',
           shareLocation: true,
         });
         onOpenFullCase(caseId);
@@ -253,7 +258,7 @@ export function AssistantScreen({
         setBusy(false);
       }
     },
-    [appendAgent, caseId, onOpenFullCase],
+    [appendAgent, caseId, onOpenFullCase, profile],
   );
 
   const started = messages.length > 1;
