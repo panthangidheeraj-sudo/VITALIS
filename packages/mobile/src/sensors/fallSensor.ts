@@ -8,8 +8,15 @@
  */
 
 import { Accelerometer } from 'expo-sensors';
-import type { Subscription } from 'expo-sensors/build/Subscription';
 import { FallDetector, magnitudeOf, FALL_THRESHOLDS, type FallEvent } from './fallDetection';
+
+/**
+ * The subscription handle, derived from `addListener`'s own return type rather
+ * than imported from `expo-sensors/build/Subscription` - that deep path is an
+ * internal build artefact and is not in the package's export map, so importing
+ * it typechecks on no machine at all. Deriving it cannot drift with the SDK.
+ */
+type AccelerometerSubscription = ReturnType<typeof Accelerometer.addListener>;
 
 const SAMPLE_INTERVAL_MS = FALL_THRESHOLDS.sampleIntervalMs;
 
@@ -23,7 +30,7 @@ const SAMPLE_INTERVAL_MS = FALL_THRESHOLDS.sampleIntervalMs;
 export async function startFallDetection(
   onFall: (event: FallEvent) => void,
 ): Promise<() => void> {
-  let subscription: Subscription | undefined;
+  let subscription: AccelerometerSubscription | undefined;
   try {
     const available = await Accelerometer.isAvailableAsync();
     if (!available) return () => undefined;

@@ -289,6 +289,24 @@ export interface CaseStorePort {
 
   listTimeline(caseId: CaseId): Promise<readonly TimelineEntry[]>;
   listToolCalls(caseId: CaseId): Promise<readonly ToolCallRecord[]>;
+
+  /**
+   * Cases whose Companion Mode reassessment is due at or before `now` (5.4).
+   *
+   * OPTIONAL, because it is the one method here that is a QUERY rather than a
+   * document operation, and not every store can answer it - a store backed by
+   * something without secondary indexes would have to scan. A scheduler that
+   * finds it absent must say Companion Mode is unavailable rather than quietly
+   * never ticking, which is the failure this signature is shaped to prevent:
+   * an absent method is a compile-time-visible capability gap, where a
+   * `listAll()` that returned an empty array would look identical to a system
+   * with no active cases.
+   *
+   * Implementations must filter on `companion.active` AND on the case still
+   * being open - reassessing a cancelled case would contact people about an
+   * emergency that is over.
+   */
+  listDueCompanionCases?(now: IsoTimestamp, limit: number): Promise<readonly CaseState[]>;
 }
 
 /** Raised by `CaseStorePort.update` when `expectedRevision` is stale. */

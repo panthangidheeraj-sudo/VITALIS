@@ -19,7 +19,6 @@ import {
   InMemoryCaseStore,
   LocalDeterministicScorer,
   MockCodingPort,
-  MockHospitalPort,
   MockNormalizationPort,
   MockNotificationPort,
   MockReasoningPort,
@@ -29,7 +28,9 @@ import { GeminiVisionPort } from '../adapters/gemini-vision-port.js';
 import { GroqReasoningPort } from '../adapters/groq-reasoning-port.js';
 import { HealthKnowledgePort } from '../adapters/knowledge-port.js';
 import { Icd11CodingPort } from '../adapters/icd11-coding-port.js';
+import { OsmHospitalPort } from '../adapters/osm-hospital-port.js';
 import { RxNavMedicationPort } from '../adapters/rxnav-medication-port.js';
+import { TwilioNotificationPort } from '../adapters/twilio-notification-port.js';
 import { FirestoreCaseStore } from '../store/firestore-case-store.js';
 import { DEMO_LEXICON } from './demo-lexicon.js';
 import { SystemClock, UuidIdPort } from './system-ports.js';
@@ -118,8 +119,27 @@ export function buildServerTools(config: ServerConfig): BuiltTools {
           release: config.icd11.release,
         })
       : new MockCodingPort(),
-    hospitals: new MockHospitalPort(),
-    notifications: new MockNotificationPort(),
+    // Real coordinates from OpenStreetMap. The specialty and bed-count overlay
+    // is still simulated - no public API publishes live bed counts - and every
+    // record carries `dataProvenance` saying which half is which.
+    hospitals: new OsmHospitalPort({
+      overpassUrl: config.osm.overpassUrl,
+      ...(config.osm.contactEmail !== undefined ? { contactEmail: config.osm.contactEmail } : {}),
+    }),
+
+    // The only port that reaches a real person. `live` is deliberately a
+    // separate decision from `enabled`; see the adapter header.
+    notifications: config.twilio.enabled
+      ? new TwilioNotificationPort({
+          accountSid: config.twilio.accountSid as string,
+          authToken: config.twilio.authToken as string,
+          ...(config.twilio.whatsappFrom !== undefined
+            ? { whatsappFrom: config.twilio.whatsappFrom }
+            : {}),
+          ...(config.twilio.smsFrom !== undefined ? { smsFrom: config.twilio.smsFrom } : {}),
+          live: config.twilio.live,
+        })
+      : new MockNotificationPort(),
     store,
   };
 

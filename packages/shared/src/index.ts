@@ -30,6 +30,9 @@ export * from './tools/ports.js';
 // --- Policy ------------------------------------------------------------------
 export * from './policy/risk-policy.js';
 
+// --- Geo ---------------------------------------------------------------------
+export * from './geo/distance.js';
+
 // --- Firestore ---------------------------------------------------------------
 export * from './firestore/paths.js';
 

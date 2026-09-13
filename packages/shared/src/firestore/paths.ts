@@ -98,6 +98,17 @@ export const REQUIRED_INDEXES = [
     description: 'Turns in loop order.',
     fields: [{ fieldPath: 'index', order: 'ASCENDING' }],
   },
+  {
+    collectionGroup: COLLECTIONS.cases,
+    description:
+      "Companion Mode's due queue (§5.4). The scheduler asks for active cases whose " +
+      'reassessment time has passed; an equality plus a range needs a composite index, ' +
+      'and without it the query fails at runtime rather than at deploy time.',
+    fields: [
+      { fieldPath: 'companion.active', order: 'ASCENDING' },
+      { fieldPath: 'companion.nextReassessmentDueAt', order: 'ASCENDING' },
+    ],
+  },
 ] as const;
 
 // --- Listener targets ---------------------------------------------------------

@@ -83,6 +83,24 @@ export interface ServerConfig {
     readonly visionModel: string;
     readonly enabled: boolean;
   };
+  /**
+   * Twilio. `live` is a separate flag from `enabled` on purpose: this is the
+   * only adapter that contacts a real person, and having the credentials is not
+   * the same decision as being willing to use them during a rehearsal.
+   */
+  readonly twilio: {
+    readonly accountSid: string | undefined;
+    readonly authToken: string | undefined;
+    readonly whatsappFrom: string | undefined;
+    readonly smsFrom: string | undefined;
+    readonly live: boolean;
+    readonly enabled: boolean;
+  };
+  /** OpenStreetMap. Keyless; the contact email is courtesy, not a credential. */
+  readonly osm: {
+    readonly overpassUrl: string;
+    readonly contactEmail: string | undefined;
+  };
   /** Force the local deterministic scorer even when Infermedica is configured. */
   readonly forceLocalScorer: boolean;
 }
@@ -94,6 +112,8 @@ export function loadConfig(): ServerConfig {
   const infermedicaAppKey = optional('INFERMEDICA_APP_KEY');
   const groqApiKey = optional('GROQ_API_KEY');
   const geminiApiKey = optional('GEMINI_API_KEY');
+  const twilioSid = optional('TWILIO_ACCOUNT_SID');
+  const twilioToken = optional('TWILIO_AUTH_TOKEN');
   const icd11ClientId = optional('ICD11_CLIENT_ID');
   const icd11ClientSecret = optional('ICD11_CLIENT_SECRET');
 
@@ -135,8 +155,23 @@ export function loadConfig(): ServerConfig {
     gemini: {
       apiKey: geminiApiKey,
       baseUrl: optional('GEMINI_BASE_URL') ?? 'https://generativelanguage.googleapis.com/v1beta',
-      visionModel: optional('GEMINI_VISION_MODEL') ?? 'gemini-2.0-flash',
+      visionModel: optional('GEMINI_VISION_MODEL') ?? 'gemini-3.6-flash',
       enabled: geminiApiKey !== undefined,
+    },
+    twilio: {
+      accountSid: twilioSid,
+      authToken: twilioToken,
+      whatsappFrom: optional('TWILIO_WHATSAPP_FROM'),
+      smsFrom: optional('TWILIO_SMS_FROM'),
+      // Defaults to DRY RUN. An operator who forgets to set this gets a
+      // rehearsal, not an unintended message to somebody's mother; the opposite
+      // default would make the dangerous outcome the accidental one.
+      live: optional('TWILIO_LIVE') === 'true',
+      enabled: twilioSid !== undefined && twilioToken !== undefined,
+    },
+    osm: {
+      overpassUrl: optional('OVERPASS_BASE_URL') ?? 'https://overpass-api.de/api/interpreter',
+      contactEmail: optional('OSM_CONTACT_EMAIL'),
     },
     forceLocalScorer: optional('FORCE_LOCAL_SCORER') === 'true',
   };
@@ -169,6 +204,12 @@ export function describeCapabilities(config: ServerConfig): readonly string[] {
     config.gemini.enabled
       ? `Vision         : LIVE - Gemini ${config.gemini.visionModel} (injury photos only; Groq keeps all text tasks)`
       : 'Vision         : UNAVAILABLE - no GEMINI_API_KEY. Injury photo assessment is disabled and says so.',
-    'Still mocked   : evidence normalization, hospitals, notifications.',
+    'Hospitals      : LIVE - OpenStreetMap / Overpass. Coordinates are real; specialties and bed counts are SIMULATED and labelled as such on every record.',
+    config.twilio.enabled
+      ? config.twilio.live
+        ? `Notifications  : LIVE - Twilio will really send (WhatsApp from ${config.twilio.whatsappFrom ?? 'unset'}). Real phones will ring.`
+        : 'Notifications  : DRY RUN - Twilio wired but TWILIO_LIVE is not "true". Messages are composed and recorded as suppressed, never sent.'
+      : 'Notifications  : mock notification port - no TWILIO_ACCOUNT_SID/AUTH_TOKEN.',
+    'Still mocked   : evidence normalization.',
   ];
 }

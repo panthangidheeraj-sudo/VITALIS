@@ -31,7 +31,7 @@ import type {
   SelectedQuestion,
   ToolResult,
 } from '@triage/shared';
-import { failedResult, liveResult, photoObservationSchema } from '@triage/shared';
+import { VISIBLE_SIGNS, failedResult, liveResult, photoObservationSchema } from '@triage/shared';
 import { requestJson } from './http.js';
 import { DESCRIBE_INJURY_PHOTO_PROMPT } from './groq-prompts.js';
 
@@ -56,10 +56,21 @@ interface GeminiResponse {
 const PHOTO_SCHEMA = {
   type: 'OBJECT',
   properties: {
-    visibleSigns: { type: 'ARRAY', items: { type: 'STRING' } },
+    // The enum is spread from the SHARED constant, not retyped. The first
+    // version of this file said `type: STRING` here while the zod gate demanded
+    // one of thirteen enum members, so the model's honest answers ("dark red
+    // diagonal line") failed validation and the photo contributed nothing at
+    // all - a silent capability loss with a green banner above it. Constraining
+    // the provider schema means the model is told the vocabulary rather than
+    // being marked wrong for not guessing it.
+    visibleSigns: { type: 'ARRAY', items: { type: 'STRING', enum: VISIBLE_SIGNS } },
     description: { type: 'STRING' },
     suggestedConceptTerms: { type: 'ARRAY', items: { type: 'STRING' } },
-    imageQuality: { type: 'NUMBER' },
+    // Gemini has returned `2` for this field when the range was only stated in
+    // the prompt. The bound is restated here, and zod still rejects an
+    // out-of-range value - a confidence number that is silently wrong is worse
+    // than a missing photo.
+    imageQuality: { type: 'NUMBER', minimum: 0, maximum: 1 },
   },
   required: ['visibleSigns', 'description', 'suggestedConceptTerms', 'imageQuality'],
 } as const;

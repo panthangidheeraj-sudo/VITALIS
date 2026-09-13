@@ -57,7 +57,13 @@ export function EmergencyQrScreen({ onBack }: { readonly onBack: () => void }) {
     // Handing an unlocked phone to a responder is useless if it sleeps in
     // their hand mid-scan.
     void activateKeepAwakeAsync('emergency-qr');
-    return () => deactivateKeepAwake('emergency-qr');
+    // Wrapped in a block, not returned directly: `deactivateKeepAwake` is
+    // async, and returning its promise makes React treat the promise itself as
+    // the cleanup function - so the screen would never release the wake lock
+    // and the phone would stay lit until it was force-quit.
+    return () => {
+      void deactivateKeepAwake('emergency-qr');
+    };
   }, []);
 
   useEffect(() => {

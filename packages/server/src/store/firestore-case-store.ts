@@ -26,11 +26,13 @@ import type {
   CaseId,
   CaseState,
   CaseStorePort,
+  IsoTimestamp,
   TimelineEntry,
   ToolCallRecord,
   TurnId,
 } from '@triage/shared';
 import {
+  COLLECTIONS,
   RevisionConflictError,
   casePath,
   timelinePath,
@@ -100,6 +102,37 @@ export class FirestoreCaseStore implements CaseStorePort {
       .orderBy('startedAt', 'desc')
       .get();
     return snapshot.docs.map((d) => d.data() as ToolCallRecord);
+  }
+
+  /**
+   * Companion Mode's due queue (5.4).
+   *
+   * The equality on `companion.active` plus the range on
+   * `companion.nextReassessmentDueAt` is a composite index requirement -
+   * Firestore will refuse the query with a console link to create it the first
+   * time it runs, which is why `firestore.indexes.json` declares it up front.
+   *
+   * `status` is filtered IN MEMORY rather than adding a third clause. An
+   * inequality plus two equalities widens the index for very little benefit at
+   * this scale, and getting the filter wrong in the query means a cancelled
+   * case keeps being reassessed - a mistake that is much easier to see written
+   * out here than buried in a chain of `.where()` calls.
+   */
+  async listDueCompanionCases(
+    now: IsoTimestamp,
+    limit: number,
+  ): Promise<readonly CaseState[]> {
+    const snapshot = await this.db
+      .collection(COLLECTIONS.cases)
+      .where('companion.active', '==', true)
+      .where('companion.nextReassessmentDueAt', '<=', now)
+      .orderBy('companion.nextReassessmentDueAt')
+      .limit(limit)
+      .get();
+
+    return snapshot.docs
+      .map((d) => d.data() as CaseState)
+      .filter((c) => c.status === 'action_taken' || c.status === 'interviewing');
   }
 }
 

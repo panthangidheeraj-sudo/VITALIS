@@ -5,7 +5,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { asCaseId, RevisionConflictError } from '@triage/shared';
+import type { CaseState } from '@triage/shared';
+import { asCaseId, requiredGate, RevisionConflictError } from '@triage/shared';
 import { buildTestTools, freshCaseState } from '../testing/build-tools.js';
 import { CaseNotFoundError, runTurn } from './run-turn.js';
 
@@ -77,5 +78,48 @@ describe('runTurn', () => {
     await expect(
       runTurn(initial.caseId, { kind: 'text', text: 'chest pain', receivedAt: '2026-09-12T07:00:00.000Z' }, tools),
     ).rejects.toBeInstanceOf(RevisionConflictError);
+  });
+});
+
+describe('a case that has already acted does not rewind', () => {
+  /**
+   * Found by driving the real server: after a confirmed ambulance dispatch,
+   * submitting an injury photo returned the case to `awaiting_confirmation`
+   * while `dispatch.status` still read `dispatch_requested`. The screen then
+   * asks the patient to hold the button to request an ambulance that is
+   * already coming.
+   */
+  it('keeps action_taken and the confirmed routing across a later turn', async () => {
+    const { tools, store } = buildTestTools(LEXICON);
+    const now = tools.clock.now();
+    const seeded: CaseState = {
+      ...freshCaseState(),
+      caseId: asCaseId('case_acted'),
+      status: 'action_taken',
+      dispatch: { status: 'dispatch_requested', simulated: true, requestedAt: now },
+      routing: {
+        outcome: 'ambulance_dispatch',
+        rationale: 'confirmed already',
+        policyRule: 'baseOutcomeByTriageLevel',
+        gate: { ...requiredGate('ambulance_dispatch'), state: 'satisfied', satisfiedAt: now },
+        proposedAt: now,
+        basedOnRiskComputedAt: now,
+        confirmedAt: now,
+      },
+    };
+    store.seed(seeded);
+
+    const result = await runTurn(
+      seeded.caseId,
+      { kind: 'text', text: 'I also feel sick', receivedAt: tools.clock.now() },
+      tools,
+    );
+
+    expect(result.state.status).toBe('action_taken');
+    expect(result.state.routing?.confirmedAt).toBeDefined();
+    // But the record still moves — freezing the whole case would hide a
+    // patient getting worse, which is the opposite of the intent.
+    expect(result.state.turnCount).toBe(seeded.turnCount + 1);
+    expect(result.state.evidence.length).toBeGreaterThanOrEqual(seeded.evidence.length);
   });
 });

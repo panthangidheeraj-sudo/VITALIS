@@ -121,7 +121,8 @@ Rules:
   condition.
 - "suggestedConceptTerms" are plain search words for the clinical layer to
   normalise (for example "bleeding", "swollen ankle"). They are not diagnoses.
-- "imageQuality" must honestly reflect blur, darkness and framing. A photo you
+- "imageQuality" is a number BETWEEN 0 AND 1 (0.0 = unreadable, 1.0 = sharp and
+  well lit). It must honestly reflect blur, darkness and framing. A photo you
   cannot read is a low number, not a confident guess - a bad photo treated as a
   measurement is worse than no photo.
 - If nothing relevant is visible, say so with the none_visible sign.

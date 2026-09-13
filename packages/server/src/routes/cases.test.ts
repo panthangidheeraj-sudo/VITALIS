@@ -53,6 +53,17 @@ const TEST_CONFIG: ServerConfig = {
     visionModel: 'x',
     enabled: false,
   },
+  // Credentials absent AND live false: these tests must never be one env var
+  // away from texting somebody. The mock notification port is what they get.
+  twilio: {
+    accountSid: undefined,
+    authToken: undefined,
+    whatsappFrom: undefined,
+    smsFrom: undefined,
+    live: false,
+    enabled: false,
+  },
+  osm: { overpassUrl: 'http://127.0.0.1:9/interpreter', contactEmail: undefined },
   forceLocalScorer: true,
 };
 

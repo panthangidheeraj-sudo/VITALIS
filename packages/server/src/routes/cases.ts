@@ -16,7 +16,29 @@ import {
 } from '@triage/shared';
 import { CaseNotFoundError, GateNotSatisfiedError, confirmRouting, runTurn } from '@triage/agent';
 import { buildNewCase } from '../case-factory.js';
+import { notifyContacts, type NotifiableContact } from '../notify/notify-contacts.js';
+import { createRelayRoutes } from './relay.js';
 import { compact } from '../util/compact.js';
+
+/**
+ * Emergency contacts, sent by the device alongside the confirmation.
+ *
+ * The medical profile is still device-local demo data by the user's explicit
+ * instruction, so the contact list arrives with the request rather than being
+ * read from `patients/{ownerUid}`. What that does and does not assume is
+ * spelled out in the header of notify-contacts.ts; it is a deliberate,
+ * documented shortcut with a one-line exit, not an oversight.
+ */
+const contactSchema = z.object({
+  id: z.string().min(1).max(64),
+  name: z.string().min(1).max(120),
+  relationship: z.string().max(40).default('other'),
+  phoneE164: z.string().regex(/^\+[1-9]\d{6,14}$/, 'Must be E.164, e.g. +919876543210'),
+  whatsappEnabled: z.boolean().default(true),
+  smsEnabled: z.boolean().default(false),
+  priority: z.number().int().min(0).max(99).default(0),
+  canRelay: z.boolean().default(false),
+});
 
 const createCaseSchema = z.object({
   /**
@@ -39,6 +61,14 @@ const turnSchema = z.object({
   fromCaregiver: z.boolean().optional(),
 });
 
+const locationSchema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  source: z
+    .enum(['browser_geolocation', 'manual_entry', 'caregiver_report', 'fixture'])
+    .default('browser_geolocation'),
+});
+
 const confirmSchema = z.object({
   /**
    * How long the user actually held the button, measured on the device.
@@ -52,6 +82,25 @@ const confirmSchema = z.object({
    * for every client that ever talks to this server.
    */
   heldMs: z.number().min(0).max(60_000),
+
+  /**
+   * Who to tell, and whether the patient agreed to share where they are.
+   *
+   * Both optional and both default to NOT contacting anyone. A confirmation
+   * that omits them still dispatches - the routing decision is the safety-
+   * critical part and must never depend on a notification list being present -
+   * it simply tells nobody. The opposite default would mean a malformed client
+   * request silently messaging a family.
+   */
+  contacts: z.array(contactSchema).max(10).optional(),
+  patientName: z.string().min(1).max(120).optional(),
+  /**
+   * Location is shared ONLY when this is true. It rides on the same 3-second
+   * hold as the dispatch itself: 5.5 requires location sharing to be an
+   * explicit act, and silently attaching coordinates to an alert would make
+   * this a tracking feature the patient never opted into.
+   */
+  shareLocation: z.boolean().default(false),
 });
 
 /**
@@ -150,6 +199,55 @@ export function createCaseRoutes(tools: AgentTools): Router {
     });
   }));
 
+  // --- Report where the patient is ---------------------------------------
+  /**
+   * Hospital matching (5.3) reads `lastKnownLocation` and does nothing at all
+   * without it. Nothing in the system was writing that field, so the hospital
+   * port was reachable in theory and dead in practice - the same shape of bug
+   * as Companion Mode's unreachable tick. This is the writer.
+   *
+   * Kept as its own endpoint rather than a field on `createCase`, because a
+   * location fix arrives on the device's schedule, not the case's: permission
+   * prompts, a cold GPS, and a move between rooms all produce it late or
+   * repeatedly. Folding it into creation would mean blocking the emergency
+   * button behind a permission dialog.
+   *
+   * A REFUSED PERMISSION IS NOT AN ERROR. The app simply never calls this, the
+   * case carries no location, and routing still works - the patient is told
+   * which kind of facility to go to rather than which one. Degrading that way
+   * is far better than making location mandatory for an emergency assessment.
+   */
+  router.post('/:id/location', wrap(async (req: Request, res: Response) => {
+    const parsed = locationSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'invalid_request', issues: parsed.error.issues });
+      return;
+    }
+    const caseId = toCaseId(req);
+    const state = await tools.store.get(caseId);
+    if (state === undefined) {
+      res.status(404).json({ error: 'case_not_found' });
+      return;
+    }
+
+    const now = tools.clock.now();
+    await tools.store.update(caseId, state.revision, {
+      ...state,
+      revision: state.revision + 1,
+      lastKnownLocation: {
+        lat: parsed.data.lat,
+        lng: parsed.data.lng,
+        at: now,
+        source: parsed.data.source,
+      },
+      updatedAt: now,
+    });
+
+    // No timeline entry: a position update is not a clinical event, and one
+    // entry per GPS fix would bury the symptoms under a movement log.
+    res.json({ ok: true });
+  }));
+
   // --- Confirm a proposed routing decision (the safety gate) --------------
   router.post('/:id/confirm', wrap(async (req: Request, res: Response) => {
     const parsed = confirmSchema.safeParse(req.body);
@@ -188,14 +286,52 @@ export function createCaseRoutes(tools: AgentTools): Router {
     };
 
     const result = await confirmRouting(satisfied, tools, now);
-    await tools.store.update(caseId, state.revision, {
+
+    // Contacts are notified HERE rather than inside confirmRouting, because the
+    // contact list belongs to the patient profile and not to the case snapshot
+    // the loop receives. See the comment at the end of confirm-routing.ts.
+    //
+    // Sequenced AFTER the routing action, deliberately: if Twilio is slow or
+    // down, the ambulance request has already been made and the hospital
+    // already matched. Nothing about the clinical outcome waits on a message.
+    const contacts = parsed.data.contacts ?? [];
+    const notified =
+      contacts.length > 0
+        ? await notifyContacts(result.nextState, contacts as readonly NotifiableContact[], tools, {
+            kind: 'emergency_alert',
+            patientName: parsed.data.patientName ?? 'Your contact',
+            ...(parsed.data.shareLocation && state.lastKnownLocation !== undefined
+              ? { location: state.lastKnownLocation }
+              : {}),
+          })
+        : undefined;
+
+    const finalState: CaseState = {
       ...result.nextState,
       revision: state.revision + 1,
-    });
-    await tools.store.appendTimeline(caseId, result.timeline);
-    for (const call of result.toolCalls) await tools.store.appendToolCall(caseId, call);
+      ...(notified !== undefined
+        ? { notifications: [...result.nextState.notifications, ...notified.records] }
+        : {}),
+    };
 
-    res.json(summarize({ ...result.nextState, revision: state.revision + 1 }));
+    await tools.store.update(caseId, state.revision, finalState);
+    await tools.store.appendTimeline(caseId, [
+      ...result.timeline,
+      ...(notified?.timeline ?? []),
+    ]);
+    for (const call of [...result.toolCalls, ...(notified?.toolCalls ?? [])]) {
+      await tools.store.appendToolCall(caseId, call);
+    }
+
+    res.json({
+      ...summarize(finalState),
+      notifications: (notified?.records ?? []).map((r) => ({
+        contactId: r.contactId,
+        channel: r.channel,
+        status: r.status,
+        ...(r.failureReason !== undefined ? { failureReason: r.failureReason } : {}),
+      })),
+    });
   }));
 
   // --- Cancel an active alert (§5.2: always available) --------------------
@@ -235,6 +371,9 @@ export function createCaseRoutes(tools: AgentTools): Router {
 
     res.json(summarize(next));
   }));
+
+  // Family Relay Mode (5.5) — mounted under the case it belongs to.
+  router.use('/:id/relay', createRelayRoutes(tools));
 
   return router;
 }

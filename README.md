@@ -18,7 +18,7 @@ autonomously diagnoses or prescribes.
 |---|---|
 | `packages/shared` — contracts, case-state model, tool ports, routing policy, schemas | **Done.** 81 tests passing. |
 | `packages/agent` — the Observe→Decide→Act→Evaluate→Adapt loop | **Done.** 39 tests passing. Runs end-to-end with zero API keys. |
-| `packages/server` — Express orchestrator, Firestore adapter | **Done.** 13 tests passing (133 total). Four endpoints wrapping the agent loop; real external adapters slot in behind the existing ports as credentials arrive. |
+| `packages/server` — Express orchestrator, Firestore adapter, real tool adapters | **Done.** 216 tests passing. Every external port is now a real adapter except evidence normalisation: Groq (reasoning), Gemini (vision), MedlinePlus + Wikipedia (knowledge), RxNav (medication), WHO ICD-11 (coding), OpenStreetMap (hospitals), Twilio (notifications). |
 | `packages/mobile` — **React Native (Expo) app, Android + iOS** | **Done.** Typechecks clean and bundles for both platforms. Needs a phone + the running server to verify interactively. |
 | `packages/web` — *superseded* | Holds only `.env` files. See "The web/mobile pivot" below. |
 
@@ -28,7 +28,7 @@ on a real phone by scanning a QR code.
 
 ```bash
 npm install
-npm run typecheck && npm test          # backend: 133 tests
+npm run typecheck && npm test          # 216 tests
 
 npm run dev  -w @triage/server         # terminal 1: orchestrator on :8787
 npm run start -w @triage/mobile        # terminal 2: Expo, then scan the QR
@@ -289,5 +289,74 @@ explicitly when its key is absent rather than crashing the loop.
    surfaces this as "Orchestrator unreachable" with that exact hint.
 
 4. **Not yet verified interactively.** The app typechecks and bundles for both
-   platforms, and the server is exercised by 13 HTTP tests, but the
+   platforms, and the server is exercised by its HTTP tests, but the
    phone → server → loop → phone round trip has not been run on a device.
+   See "Verifying on a phone" below.
+
+5. **Companion Mode needs one Firestore composite index.** The scheduler queries
+   `companion.active` + `companion.nextReassessmentDueAt`, which Firestore
+   cannot serve without a composite index. It is declared in
+   `firebase/firestore.indexes.json`; deploy it with
+   `firebase deploy --only firestore:indexes`, or click the link the server
+   prints on its first sweep. Until then the server says, in as many words,
+   `COMPANION MODE IS NOT RUNNING` — it does not fail silently.
+
+6. **Twilio defaults to dry run.** `TWILIO_LIVE` must be exactly `true` before
+   anything is put on the wire. Off, the adapter still composes every message
+   and records it on the timeline as `suppressed`, so the whole path is
+   demonstrable without texting anyone. **Before switching it on, replace the
+   placeholder numbers in `packages/mobile/src/data/demoProfile.ts`** — they are
+   plausible Indian mobile numbers and may well belong to a real person.
+
+---
+
+## Verifying on a phone
+
+Both devices must be on the **same Wi-Fi**. Corporate, campus and guest networks
+frequently block device-to-device traffic; a phone hotspot with the laptop
+joined to it is the reliable fallback.
+
+1. **Find the laptop's LAN IP.**
+   `ipconfig` on Windows — the IPv4 address of the active adapter, e.g.
+   `192.168.1.7`. `npx expo start` also prints it in the URL above the QR code.
+
+2. **Point the app at it.** In `packages/mobile/.env`:
+   ```
+   EXPO_PUBLIC_API_URL=http://192.168.1.7:8787
+   ```
+   `localhost` on a phone means *the phone*, so the default only works on an
+   emulator. Expo inlines these at bundle time — **restart** `expo start` after
+   changing it; a reload alone will not pick it up.
+
+3. **Let the server through the firewall.** Windows Defender blocks inbound
+   connections to Node by default, and this looks exactly like a wrong IP.
+   Check it from the phone's browser first: `http://192.168.1.7:8787/health`
+   should return JSON. If it does not, allow Node on private networks:
+   ```
+   netsh advfirewall firewall add rule name="VITALIS orchestrator" dir=in action=allow protocol=TCP localport=8787
+   ```
+   (run as Administrator; delete it again with `netsh advfirewall firewall
+   delete rule name="VITALIS orchestrator"`).
+
+4. **Start both.**
+   ```
+   npm run dev   -w @triage/server
+   npm run start -w @triage/mobile
+   ```
+   Install **Expo Go** from the Play Store / App Store and scan the QR. Android
+   scans it from inside Expo Go; iOS from the system Camera app.
+
+5. **Walk the trace.** Emergency → "I have chest pain" → "pain going down my
+   left arm". The tier should reach **red in two turns**, name the rule
+   (*chest pain radiating to the left arm*), and propose ambulance dispatch
+   behind the 3-second hold. Complete the hold and the tracking screen should
+   name a **real hospital near you** with an approximate distance.
+
+**What needs which permission:** location (hospital matching — refusing it is
+fine, you simply get no named hospital), camera (injury scan and medicine
+scanner), motion (fall detection). None of them gate the emergency button.
+
+**Known Expo Go limitation:** `react-native-maps` renders blank in Expo Go on
+recent SDKs. The tracking screen falls back to text — hospital name, distance,
+ETA, status — which carries the whole demo; the map is presentation, not agent
+logic.

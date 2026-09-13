@@ -30,6 +30,9 @@ import { PressAndHold } from '../components/PressAndHold';
 import { RiskBadge } from '../components/RiskBadge';
 import { QUICK_SELECT_OPTIONS } from '../data/quickSelectTags';
 import { api, ApiError, type CaseSummary, type TurnResponse } from '../api/client';
+import { DEMO_DEMOGRAPHICS } from '../data/demoProfile';
+import { demoNotifiableContacts } from '../data/notifiableContacts';
+import { reportLocationOnce } from '../location/reportLocation';
 import { useCaseState } from '../firebase/useCaseState';
 import { isFirebaseConfigured } from '../firebase/client';
 import { resolveOwnerUid } from '../identity';
@@ -87,6 +90,12 @@ export function EmergencyScreen({ onDispatched, onBack }: Props) {
         if (cancelled) return;
         setCaseId(created.caseId);
         setSummary(created);
+        // Fire-and-forget, deliberately NOT awaited. Hospital matching needs a
+        // position, but nothing else does - so the interview starts
+        // immediately and the fix lands whenever the GPS produces one. A
+        // refused permission simply means no hospital is named later; see
+        // reportLocation.ts.
+        void reportLocationOnce(created.caseId);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(describe(err));
@@ -139,7 +148,18 @@ export function EmergencyScreen({ onDispatched, onBack }: Props) {
       setBusy(true);
       setError(undefined);
       try {
-        const result = await api.confirm(caseId, heldMs);
+        // Emergency contacts ride on the SAME confirmation as the dispatch, and
+        // so does the location share. Both are things the patient is agreeing
+        // to by completing the hold; asking again afterwards would be a second
+        // decision at the worst possible moment, and attaching them silently
+        // without the hold would make this a tracking feature nobody opted
+        // into. Contacts come from the device profile - see
+        // notifiableContacts.ts for why that is a documented shortcut.
+        const result = await api.confirm(caseId, heldMs, {
+          contacts: demoNotifiableContacts(),
+          patientName: DEMO_DEMOGRAPHICS.displayName ?? 'Your contact',
+          shareLocation: true,
+        });
         setSummary(result);
         onDispatched(caseId);
       } catch (err) {

@@ -26,7 +26,7 @@ import type {
   TimelineEntry,
   ToolCallRecord,
 } from '@triage/shared';
-import { asTimelineEntryId, asTurnId } from '@triage/shared';
+import { asTimelineEntryId, asTurnId, estimateTravelMinutes, haversineKm } from '@triage/shared';
 import { callTool, type CallToolContext } from './ledger.js';
 
 export interface ConfirmRoutingResult {
@@ -106,19 +106,24 @@ export async function confirmRouting(
     );
     if (hospitalResult.ok && hospitalResult.data.length > 0) {
       const best = hospitalResult.data[0]!;
+      // Real numbers now that the port returns real coordinates. These were
+      // hardcoded zeros while the only implementation was a fixture, and a
+      // tracking screen reading "0 km, 0 min away" is worse than one reading
+      // nothing - it looks like an arrival, not a missing value.
+      const distanceKm = haversineKm(state.lastKnownLocation, best.location);
       hospital = {
         hospital: best,
-        distanceKm: 0,
-        estimatedTravelMinutes: 0,
+        distanceKm,
+        estimatedTravelMinutes: estimateTravelMinutes(distanceKm),
         specialtyMatched: best.specialties.length > 0,
-        matchRationale: 'Nearest facility with an emergency department and free capacity.',
+        matchRationale: `Nearest facility with an emergency department, approximately ${distanceKm.toFixed(1)} km away.`,
         matchedAt: confirmedAt,
       };
       timeline.push(
         mkEntry(tools.ids, confirmedAt, {
           kind: 'hospital_matched',
           provenance: 'tool_output',
-          summary: `${best.name} matched`,
+          summary: `${best.name} matched (~${distanceKm.toFixed(1)} km)`,
           riskTierAfter: state.risk.tier,
         }),
       );
@@ -170,10 +175,30 @@ export async function confirmRouting(
   // where that profile lookup plus the real Twilio call belong. Wiring a
   // guessed contact list in here would be worse than leaving it explicit.
 
+  // COMPANION MODE STARTS HERE (5.4). This is the line that makes the system an
+  // agent rather than a form: the triage decision is not the end of the
+  // interaction, it is the point at which the agent stops asking and starts
+  // watching. Until now `companion.active` was false at every construction site
+  // and nothing ever flipped it, so `runCompanionTick` existed and was
+  // unreachable - the scheduler in packages/server polls exactly this flag.
+  //
+  // The first reassessment is scheduled one interval out rather than
+  // immediately: the state was recomputed moments ago and an instant re-tick
+  // would put a meaningless "nothing changed" entry on the timeline directly
+  // under the decision.
+  const companion = {
+    ...state.companion,
+    active: true,
+    nextReassessmentDueAt: new Date(
+      new Date(confirmedAt).getTime() + state.companion.intervalMs,
+    ).toISOString(),
+  };
+
   const nextState: CaseState = {
     ...state,
     routing,
     status: 'action_taken',
+    companion,
     dispatch,
     ...(hospital !== undefined ? { hospital } : {}),
     ...(preArrival !== undefined ? { preArrival } : {}),

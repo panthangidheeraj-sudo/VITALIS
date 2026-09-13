@@ -9,6 +9,7 @@
 import type {
   CaseId,
   CaseState,
+  IsoTimestamp,
   TimelineEntry,
   ToolCallRecord,
   TurnId,
@@ -66,6 +67,30 @@ export class InMemoryCaseStore implements CaseStorePort {
 
   async listToolCalls(caseId: CaseId): Promise<readonly ToolCallRecord[]> {
     return this.toolCallLog.get(caseId) ?? [];
+  }
+
+  /**
+   * The same due-queue the Firestore store answers with an index, done here by
+   * scanning. Present so the Companion Mode scheduler can be exercised end to
+   * end with no Firebase credential at all - without it, the one feature whose
+   * whole point is "the agent keeps working when nobody is looking" would be
+   * untestable in CI.
+   */
+  async listDueCompanionCases(now: IsoTimestamp, limit: number): Promise<readonly CaseState[]> {
+    return [...this.cases.values()]
+      .filter(
+        (c) =>
+          c.companion.active &&
+          (c.status === 'action_taken' || c.status === 'interviewing') &&
+          (c.companion.nextReassessmentDueAt === undefined ||
+            c.companion.nextReassessmentDueAt <= now),
+      )
+      .sort((a, b) =>
+        (a.companion.nextReassessmentDueAt ?? '').localeCompare(
+          b.companion.nextReassessmentDueAt ?? '',
+        ),
+      )
+      .slice(0, limit);
   }
 
   /** Test-only convenience — bypasses the revision check for initial setup. */

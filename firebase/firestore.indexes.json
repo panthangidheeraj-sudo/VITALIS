@@ -14,6 +14,14 @@
       "collectionGroup": "turns",
       "queryScope": "COLLECTION",
       "fields": [{ "fieldPath": "index", "order": "ASCENDING" }]
+    },
+    {
+      "collectionGroup": "cases",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "companion.active", "order": "ASCENDING" },
+        { "fieldPath": "companion.nextReassessmentDueAt", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

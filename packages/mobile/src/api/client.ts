@@ -63,6 +63,35 @@ export interface MedicationLookup {
   readonly interactionNotice: string;
 }
 
+/**
+ * An emergency contact in the shape the server's notification layer expects.
+ *
+ * Sent WITH the confirmation rather than read from a stored profile, because
+ * the medical profile is still device-local demo data. `phoneE164` is validated
+ * server-side against a strict E.164 pattern: a local-format number is accepted
+ * by Twilio's API and then silently never delivered, which is the worst kind of
+ * failure this feature can have.
+ */
+export interface NotifiableContact {
+  readonly id: string;
+  readonly name: string;
+  readonly relationship: string;
+  readonly phoneE164: string;
+  readonly whatsappEnabled: boolean;
+  readonly smsEnabled: boolean;
+  readonly priority: number;
+  /** May this person answer clinical questions on the patient's behalf (5.5)? */
+  readonly canRelay: boolean;
+}
+
+export interface NotificationOutcome {
+  readonly contactId: string;
+  readonly channel: string;
+  /** `suppressed` means composed but not sent - a dry run, or an opted-out contact. */
+  readonly status: 'queued' | 'sent' | 'delivered' | 'failed' | 'suppressed';
+  readonly failureReason?: string;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -134,10 +163,81 @@ export const api = {
    * re-checks it against the policy's required duration — the client does not
    * get to declare the gate satisfied.
    */
-  confirm: (caseId: CaseId, heldMs: number) =>
-    request<CaseSummary>(`/cases/${caseId}/confirm`, { heldMs }),
+  confirm: (
+    caseId: CaseId,
+    heldMs: number,
+    /**
+     * Optional on purpose. A confirmation with no contacts still dispatches -
+     * the routing decision must never depend on a notification list being
+     * present - it simply tells nobody.
+     */
+    notify?: {
+      readonly contacts: readonly NotifiableContact[];
+      readonly patientName: string;
+      /** Location rides on the same 3-second hold; never attached silently. */
+      readonly shareLocation: boolean;
+    },
+  ) =>
+    request<CaseSummary & { notifications: readonly NotificationOutcome[] }>(
+      `/cases/${caseId}/confirm`,
+      {
+        heldMs,
+        ...(notify === undefined
+          ? {}
+          : {
+              contacts: notify.contacts,
+              patientName: notify.patientName,
+              shareLocation: notify.shareLocation,
+            }),
+      },
+    ),
 
   cancel: (caseId: CaseId) => request<CaseSummary>(`/cases/${caseId}/cancel`),
+
+  /**
+   * Best-effort position report, for hospital matching (5.3).
+   *
+   * Nothing waits on this and nothing fails if it never happens - see
+   * src/location/reportLocation.ts. `source` is recorded so a clinician
+   * reading the case can tell a GPS fix from a number somebody typed in.
+   */
+  reportLocation: (
+    caseId: CaseId,
+    lat: number,
+    lng: number,
+    source: 'browser_geolocation' | 'manual_entry' | 'caregiver_report' = 'browser_geolocation',
+  ) => request<{ ok: boolean }>(`/cases/${caseId}/location`, { lat, lng, source }),
+
+  /**
+   * Family Relay Mode (5.5) - ask a caregiver to take over the interview.
+   *
+   * Two calls, not one, and the split matters: `requestRelay` only sends the
+   * invitation. The case does not claim a caregiver is answering until that
+   * caregiver's own device calls `acceptRelay`, which is also what grants them
+   * read access under the Firestore rules.
+   */
+  requestRelay: (
+    caseId: CaseId,
+    input: {
+      readonly patientName: string;
+      readonly contacts: readonly NotifiableContact[];
+      readonly reason?: 'patient_unresponsive' | 'patient_requested' | 'minor_needs_adult';
+      readonly silenceSeconds?: number;
+      readonly shareLocation?: boolean;
+    },
+  ) =>
+    request<{
+      relay: { active: boolean; requestedAt?: string };
+      invited: readonly string[];
+      notifications: readonly NotificationOutcome[];
+    }>(`/cases/${caseId}/relay/request`, input),
+
+  /** Called from the CAREGIVER's device, with the caregiver's own uid. */
+  acceptRelay: (caseId: CaseId, relayUid: string, contactId?: string) =>
+    request<{ relay: { active: boolean }; mode: string; communicationState: string }>(
+      `/cases/${caseId}/relay/accept`,
+      { relayUid, ...(contactId === undefined ? {} : { contactId }) },
+    ),
 
   /** RxNorm name normalisation. Never returns interaction data - see the route. */
   normalizeMedications: (names: readonly string[]) =>

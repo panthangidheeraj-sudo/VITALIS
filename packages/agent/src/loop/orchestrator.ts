@@ -551,7 +551,37 @@ export async function orchestrateTurn(
     updatedAt: now,
   };
 
-  return { nextState, turn, timeline, toolCalls };
+  return { nextState: preserveActedOnOutcome(state, nextState), turn, timeline, toolCalls };
+}
+
+/**
+ * Once a decision has been ACTED ON, later turns observe — they do not
+ * re-decide.
+ *
+ * Found live: after a confirmed ambulance dispatch, adding an injury photo put
+ * the case back into `awaiting_confirmation` while `dispatch.status` still read
+ * `dispatch_requested`. The screen then asks the patient to hold the button to
+ * request an ambulance that is already on its way — which either produces a
+ * second request or, worse, reads as the first one having failed.
+ *
+ * The same guard already existed inside `runCompanionTick` for background
+ * ticks. It belongs HERE, on the one function both paths go through, because
+ * the hazard was never specific to ticks: any input arriving after the act is
+ * enough.
+ *
+ * Note what is NOT frozen. `risk`, `confidence`, `evidence` and the timeline
+ * all still update, so a deteriorating patient is visibly deteriorating and the
+ * record stays complete. Only the already-taken OUTCOME is protected from
+ * being silently rewound underneath the person looking at it.
+ */
+function preserveActedOnOutcome(before: CaseState, after: CaseState): CaseState {
+  if (before.status !== 'action_taken' && before.status !== 'escalated') return after;
+  return {
+    ...after,
+    status: before.status,
+    escalation: before.escalation,
+    ...(before.routing !== undefined ? { routing: before.routing } : {}),
+  };
 }
 
 function capitalize(s: string): string {

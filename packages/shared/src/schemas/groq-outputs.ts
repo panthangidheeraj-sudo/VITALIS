@@ -105,26 +105,40 @@ export const communicationReadOutputSchema = z.object({
  * search terms handed to Infermedica `/search` for normalisation, so even the
  * concept mapping is done by the clinical layer rather than the model.
  */
+/**
+ * The CLOSED set of signs a vision model may report.
+ *
+ * Exported rather than inlined below because two independent schemas have to
+ * agree on it: this zod gate, and the provider-side JSON schema sent to Gemini
+ * (packages/server/src/adapters/gemini-vision-port.ts). When the provider
+ * schema said "any string" and this one said "one of these thirteen", every
+ * honest response - "dark red diagonal line" - was rejected at the gate and the
+ * photo silently contributed nothing. Verified against the live model before it
+ * was fixed. One constant, imported by both, is what stops that recurring.
+ *
+ * It is a closed set on purpose: free text here would flow into evidence
+ * normalisation, and "compound fracture" is a diagnosis wearing an
+ * observation's clothes.
+ */
+export const VISIBLE_SIGNS = [
+  'bleeding',
+  'heavy_bleeding',
+  'swelling',
+  'bruising',
+  'burn',
+  'blistering',
+  'discolouration',
+  'deformity',
+  'open_wound',
+  'rash',
+  'foreign_object',
+  'pallor',
+  'none_visible',
+] as const;
+export type VisibleSign = (typeof VISIBLE_SIGNS)[number];
+
 export const photoObservationSchema = z.object({
-  visibleSigns: z
-    .array(
-      z.enum([
-        'bleeding',
-        'heavy_bleeding',
-        'swelling',
-        'bruising',
-        'burn',
-        'blistering',
-        'discolouration',
-        'deformity',
-        'open_wound',
-        'rash',
-        'foreign_object',
-        'pallor',
-        'none_visible',
-      ]),
-    )
-    .max(8),
+  visibleSigns: z.array(z.enum(VISIBLE_SIGNS)).max(8),
   description: z.string().min(1).max(600),
   suggestedConceptTerms: z.array(z.string().min(1)).max(6),
   /** A blurry or dark photo must not be treated as a measurement. */
