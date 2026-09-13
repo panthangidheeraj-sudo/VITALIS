@@ -2,12 +2,12 @@
  * Medication reminders — real, user-entered, persisted. See
  * `data/medicationStore.ts` for why the old hardcoded list had to go.
  *
- * THE WEEK STRIP IS A REAL CALENDAR VIEW, WITH A HONEST LIMIT: reminders here
- * are a daily routine time ("8:00 AM"), not a dated event — there is no
- * recurrence or per-day scheduling model. So every reminder shows on every
- * day of the strip, which is the truthful rendering of "this happens daily",
- * rather than inventing per-date data the store does not have. Tapping a day
- * scopes the list below to what is due that day of the week (today vs. not).
+ * EACH REMINDER PICKS ITS OWN SCHEDULE when added — Daily, or specific
+ * dates (a comma-separated `YYYY-MM-DD` list; there is no native date-picker
+ * dependency in this build, so this is the same plain-text-field pattern the
+ * Profile screen uses for allergies/medications, not a placeholder). The week
+ * strip reads `isDueOn` per reminder, so a dated reminder only lights up the
+ * days it is actually due — a real calendar view, not a decoration.
  *
  * Minimal empty state, matching VitalsPanel and P2 #6: nothing logged is one
  * tappable line, not a card explaining itself.
@@ -15,7 +15,13 @@
 
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
-import { useMedications } from '../data/medicationStore';
+import {
+  isDueOn,
+  toDateKey,
+  useMedications,
+  type MedicationReminder,
+  type ReminderSchedule,
+} from '../data/medicationStore';
 import { Glass, Label } from '../ui/primitives';
 import { colors, fonts, radius, spacing, type } from '../theme';
 
@@ -32,19 +38,21 @@ function currentWeek(): readonly Date[] {
   });
 }
 
-function WeekStrip() {
+function WeekStrip({ reminders }: { readonly reminders: readonly MedicationReminder[] }) {
   const today = new Date();
   const week = currentWeek();
   return (
     <View style={styles.weekRow}>
       {week.map((day) => {
         const isToday = day.toDateString() === today.toDateString();
+        const due = reminders.some((r) => isDueOn(r, day));
         return (
           <View key={day.toISOString()} style={styles.dayCell}>
             <Text style={styles.dayLabel}>{DAY_LABELS[day.getDay()]}</Text>
             <View style={[styles.dayNum, isToday ? styles.dayNumToday : null]}>
               <Text style={[styles.dayNumText, isToday ? styles.dayNumTextToday : null]}>{day.getDate()}</Text>
             </View>
+            <View style={[styles.dueDot, due ? styles.dueDotOn : null]} />
           </View>
         );
       })}
@@ -52,20 +60,42 @@ function WeekStrip() {
   );
 }
 
+function scheduleLabel(schedule: ReminderSchedule): string {
+  if (schedule.kind === 'daily') return 'Daily';
+  if (schedule.dates.length === 0) return 'No dates set';
+  return schedule.dates.join(', ');
+}
+
 export function MedicationsPanel() {
   const { reminders, loading, add, remove, toggleTaken } = useMedications();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [at, setAt] = useState('');
+  const [mode, setMode] = useState<'daily' | 'dates'>('daily');
+  const [dates, setDates] = useState('');
 
   const submit = () => {
-    add(name, at);
+    const schedule: ReminderSchedule =
+      mode === 'daily'
+        ? { kind: 'daily' }
+        : {
+            kind: 'dates',
+            dates: dates
+              .split(',')
+              .map((d) => d.trim())
+              .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)),
+          };
+    add(name, at, schedule);
     setName('');
     setAt('');
+    setDates('');
+    setMode('daily');
     setAdding(false);
   };
 
   if (loading) return null;
+
+  const today = new Date();
 
   return (
     <View>
@@ -78,7 +108,7 @@ export function MedicationsPanel() {
         ) : null}
       </View>
 
-      {reminders.length > 0 ? <WeekStrip /> : null}
+      {reminders.length > 0 ? <WeekStrip reminders={reminders} /> : null}
 
       {adding ? (
         <Glass tone="blue" contentStyle={styles.addCard}>
@@ -104,6 +134,31 @@ export function MedicationsPanel() {
               />
             </View>
           </View>
+
+          <Label style={{ marginTop: 10 }}>SCHEDULE</Label>
+          <View style={styles.modeRow}>
+            {(['daily', 'dates'] as const).map((option) => (
+              <Pressable
+                key={option}
+                onPress={() => setMode(option)}
+                style={[styles.modeOption, mode === option ? styles.modeOptionSelected : null]}
+              >
+                <Text style={[styles.modeOptionText, mode === option ? styles.modeOptionTextSelected : null]}>
+                  {option === 'daily' ? 'Every day' : 'Specific dates'}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {mode === 'dates' ? (
+            <TextInput
+              value={dates}
+              onChangeText={setDates}
+              placeholder={`e.g. ${toDateKey(today)}, ${toDateKey(new Date(today.getTime() + 86400000))}`}
+              placeholderTextColor={colors.faint}
+              style={[styles.input, { marginTop: 8 }]}
+            />
+          ) : null}
+
           <View style={styles.addActions}>
             <Pressable onPress={() => setAdding(false)} style={styles.cancelBtn}>
               <Text style={styles.cancelText}>Cancel</Text>
@@ -129,15 +184,17 @@ export function MedicationsPanel() {
             >
               <View style={{ flex: 1 }}>
                 <Text style={styles.reminderName}>{reminder.name}</Text>
-                <Text style={[type.small, { marginTop: 2 }]}>{reminder.at}</Text>
+                <Text style={[type.small, { marginTop: 2 }]}>
+                  {`${reminder.at} · ${scheduleLabel(reminder.schedule)}`}
+                </Text>
               </View>
               <Text
                 style={[
                   styles.reminderState,
-                  { color: reminder.takenToday ? colors.ok : colors.warn },
+                  { color: reminder.takenToday ? colors.ok : isDueOn(reminder, today) ? colors.warn : colors.faint },
                 ]}
               >
-                {reminder.takenToday ? 'TAKEN' : 'DUE'}
+                {reminder.takenToday ? 'TAKEN' : isDueOn(reminder, today) ? 'DUE' : 'NOT TODAY'}
               </Text>
             </Pressable>
           ))}
@@ -157,6 +214,8 @@ const styles = StyleSheet.create({
   dayNumToday: { backgroundColor: colors.brand },
   dayNumText: { fontFamily: fonts.sansSemi, fontSize: 12, color: colors.ink },
   dayNumTextToday: { color: colors.white, fontFamily: fonts.sansBold },
+  dueDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: 'transparent' },
+  dueDotOn: { backgroundColor: colors.warn },
   addLink: { fontFamily: fonts.sansBold, fontSize: 12.5, color: colors.brand },
   emptyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
   emptyPlus: { fontFamily: fonts.sansBold, fontSize: 15, color: colors.brand },
@@ -178,6 +237,19 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginTop: 4,
   },
+  modeRow: { flexDirection: 'row', gap: 8, marginTop: 6 },
+  modeOption: {
+    flex: 1,
+    borderRadius: radius.sm,
+    paddingVertical: 9,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.55)',
+    borderWidth: 1,
+    borderColor: colors.hairline,
+  },
+  modeOptionSelected: { backgroundColor: colors.brand, borderColor: colors.brand },
+  modeOptionText: { fontFamily: fonts.sansSemi, fontSize: 12, color: colors.ink },
+  modeOptionTextSelected: { color: colors.white },
   addActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
   cancelBtn: {
     flex: 1,

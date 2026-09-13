@@ -20,11 +20,30 @@ import { Router, type NextFunction, type Request, type Response } from 'express'
 import { z } from 'zod';
 import type { AgentTools } from '@triage/shared';
 import { degradationOf } from '@triage/shared';
+import { requestJson } from '../adapters/http.js';
 
 const lookupSchema = z.object({
   /** Names as read off the packaging, or typed by the patient. */
   names: z.array(z.string().min(1).max(120)).min(1).max(10),
 });
+
+const referenceSchema = z.object({
+  name: z.string().min(1).max(120),
+});
+
+interface PubChemPropertyResponse {
+  readonly PropertyTable?: {
+    readonly Properties?: readonly {
+      readonly CID?: number;
+      readonly MolecularFormula?: string;
+      readonly IUPACName?: string;
+    }[];
+  };
+}
+
+interface DailyMedSplsResponse {
+  readonly data?: readonly { readonly setid?: string; readonly title?: string }[];
+}
 
 export const INTERACTION_NOTICE =
   'Drug interactions are NOT checked. This lookup confirms what a medicine is, not whether it is safe alongside anything else. Ask a pharmacist or doctor.';
@@ -68,6 +87,63 @@ export function createMedicationRoutes(tools: AgentTools): Router {
         degradationNotice: degradationOf(result)?.userFacingMessage,
         // Sent on every response, including the clean ones. A field that only
         // appears on failure teaches the client to ignore it.
+        interactionsChecked: false,
+        interactionNotice: INTERACTION_NOTICE,
+      });
+    }),
+  );
+
+  /**
+   * Reference lookup — chemical formula (PubChem) and an official FDA label
+   * link (DailyMed), alongside the RxNorm normalisation above. Both are
+   * keyless, free NIH/NLM services, and both are best-effort: a miss on
+   * either just omits that field rather than failing the request, the same
+   * "supplementary, never on the critical path" treatment `http.ts` gives
+   * knowledge/coding lookups.
+   *
+   * STILL NOT INTERACTION DATA. DailyMed's label text contains warnings
+   * prose, not a structured interaction check, so `INTERACTION_NOTICE`
+   * applies here exactly as it does above.
+   */
+  router.get(
+    '/reference',
+    wrap(async (req: Request, res: Response) => {
+      const parsed = referenceSchema.safeParse(req.query);
+      if (!parsed.success) {
+        res.status(400).json({ error: 'invalid_request', issues: parsed.error.issues });
+        return;
+      }
+      const name = parsed.data.name;
+
+      const [pubchem, dailyMed] = await Promise.all([
+        requestJson<PubChemPropertyResponse>(
+          `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(name)}/property/MolecularFormula,IUPACName/JSON`,
+        ),
+        requestJson<DailyMedSplsResponse>(
+          `https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?drug_name=${encodeURIComponent(name)}`,
+        ),
+      ]);
+
+      const property = pubchem.ok ? pubchem.value?.PropertyTable?.Properties?.[0] : undefined;
+      const spl = dailyMed.ok ? dailyMed.value?.data?.[0] : undefined;
+
+      res.json({
+        name,
+        pubchem:
+          property === undefined
+            ? undefined
+            : {
+                cid: property.CID,
+                molecularFormula: property.MolecularFormula,
+                iupacName: property.IUPACName,
+              },
+        dailyMed:
+          spl?.setid === undefined
+            ? undefined
+            : {
+                title: spl.title,
+                labelUrl: `https://dailymed.nlm.nih.gov/dailymed/drugInfo.cfm?setid=${spl.setid}`,
+              },
         interactionsChecked: false,
         interactionNotice: INTERACTION_NOTICE,
       });

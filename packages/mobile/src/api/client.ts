@@ -294,6 +294,14 @@ export const api = {
   normalizeMedications: (names: readonly string[]) =>
     request<MedicationLookup>('/medications/normalize', { names }),
 
+  /** PubChem formula + DailyMed label link. Best-effort; either may be absent. */
+  medicationReference: (name: string) =>
+    request<{
+      readonly name: string;
+      readonly pubchem?: { readonly cid?: number; readonly molecularFormula?: string; readonly iupacName?: string };
+      readonly dailyMed?: { readonly title?: string; readonly labelUrl: string };
+    }>(`/medications/reference?name=${encodeURIComponent(name)}`),
+
   /**
    * Nearby hospitals (5.3 UI) - a thin pass-through to `tools.hospitals.findNearby`.
    * See `packages/server/src/routes/hospitals.ts` for the provenance split

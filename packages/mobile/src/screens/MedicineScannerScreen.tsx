@@ -22,10 +22,15 @@
  */
 
 import { useCallback, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { api, ApiError, type MedicationLookup } from '../api/client';
 import { colors, fonts, glass, radius, spacing, type } from '../theme';
 import { BackLink, Card, Label, NoticeCard, PrimaryButton } from '../ui/primitives';
+
+interface Reference {
+  readonly pubchem?: { readonly cid?: number; readonly molecularFormula?: string; readonly iupacName?: string };
+  readonly dailyMed?: { readonly title?: string; readonly labelUrl: string };
+}
 
 type Status =
   | { readonly kind: 'idle' }
@@ -48,13 +53,21 @@ export function MedicineScannerScreen({ onBack }: { readonly onBack: () => void 
   const [name, setName] = useState('');
   const [expiry, setExpiry] = useState('');
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
+  const [reference, setReference] = useState<Reference | undefined>(undefined);
 
   const lookup = useCallback(async () => {
     if (name.trim().length === 0) return;
     setStatus({ kind: 'looking_up' });
+    setReference(undefined);
     try {
       const result = await api.normalizeMedications([name.trim()]);
       setStatus({ kind: 'done', result });
+      // Best-effort and separate from the main lookup: a PubChem/DailyMed miss
+      // must never block showing the RxNorm result above.
+      api
+        .medicationReference(name.trim())
+        .then((ref) => setReference(ref))
+        .catch(() => setReference(undefined));
     } catch (err) {
       setStatus({
         kind: 'error',
@@ -154,6 +167,22 @@ export function MedicineScannerScreen({ onBack }: { readonly onBack: () => void 
         </Card>
       ) : null}
 
+      {reference?.pubchem !== undefined || reference?.dailyMed !== undefined ? (
+        <Card tone="blue">
+          <Label>MORE INFO</Label>
+          {reference.pubchem?.molecularFormula !== undefined ? (
+            <Text style={[type.small, { marginTop: 7 }]}>
+              {`Molecular formula: ${reference.pubchem.molecularFormula} (PubChem)`}
+            </Text>
+          ) : null}
+          {reference.dailyMed !== undefined ? (
+            <Pressable onPress={() => void Linking.openURL(reference.dailyMed!.labelUrl)}>
+              <Text style={styles.dailyMedLink}>Official FDA label (DailyMed) →</Text>
+            </Pressable>
+          ) : null}
+        </Card>
+      ) : null}
+
       {/* Shown on EVERY completed lookup, not only on failure: a warning that
           appears sometimes is a warning people learn to ignore. */}
       {status.kind === 'done' ? (
@@ -208,4 +237,5 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   verdict: { fontFamily: fonts.sansBlack, fontSize: 17, color: colors.ink, marginTop: 8 },
+  dailyMedLink: { fontFamily: fonts.sansBold, fontSize: 12.5, color: colors.brand, marginTop: 9 },
 });

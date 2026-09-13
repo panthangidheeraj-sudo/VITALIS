@@ -1,39 +1,62 @@
 /**
  * Manually-entered medication reminders, persisted on-device.
  *
- * Replaces a HARDCODED two-item array ("Metformin 500 mg, TAKEN" /
- * "Amlodipine 5 mg, DUE") that rendered as a live reminder list regardless of
- * who was using the app or what they actually take — the exact kind of mock
- * data flagged for removal. Same pattern as `vitalsStore.ts`: nothing here is
- * read from anywhere but what the user typed in, stored locally, never sent
- * anywhere.
+ * Same pattern as `vitalsStore.ts`: nothing here is read from anywhere but
+ * what the user typed in, stored locally, never sent anywhere.
  *
- * NOT a calendar/scheduling engine. A full month-grid calendar view is a
- * meaningfully larger UI (a day-cell grid, a recurrence model, multi-day
- * navigation) than this turn had room for — this ships the list, grouped by
- * time of day, as the honest interim shape. See the follow-up note where this
- * is wired in.
+ * EACH REMINDER HAS ITS OWN SCHEDULE — 'daily' (every day, the original
+ * behaviour) or 'dates' (only the specific calendar dates the user picked).
+ * This is what makes the week-strip in `MedicationsPanel.tsx` a real
+ * calendar rather than a decoration: a dated reminder only lights up the
+ * days it is actually due.
  */
 
 import { useCallback, useEffect, useState } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+export type ReminderSchedule =
+  | { readonly kind: 'daily' }
+  | { readonly kind: 'dates'; readonly dates: readonly string[] };
+
 export interface MedicationReminder {
   readonly id: string;
   readonly name: string;
-  /** Free-text time, e.g. "8:00 AM" — deliberately not a Date; this is a daily
-   * routine time, not a one-off calendar event. */
+  /** Free-text time, e.g. "8:00 AM" — deliberately not a Date; this is a
+   * routine time of day, independent of which day(s) it applies. */
   readonly at: string;
   readonly takenToday: boolean;
+  readonly schedule: ReminderSchedule;
 }
 
-const STORAGE_KEY = 'triage.medications.manual.v1';
+const STORAGE_KEY = 'triage.medications.manual.v2';
+
+/** `YYYY-MM-DD` in local time, matching what the date fields collect. */
+export function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function isDueOn(reminder: MedicationReminder, date: Date): boolean {
+  return reminder.schedule.kind === 'daily' || reminder.schedule.dates.includes(toDateKey(date));
+}
 
 async function readStored(): Promise<readonly MedicationReminder[]> {
   try {
     const raw = await AsyncStorage.getItem(STORAGE_KEY);
     if (raw === null) return [];
-    return JSON.parse(raw) as readonly MedicationReminder[];
+    const parsed = JSON.parse(raw) as readonly Partial<MedicationReminder>[];
+    // Normalises anything written before schedules existed to 'daily', so an
+    // old reminder keeps behaving exactly as it did rather than vanishing
+    // from every day.
+    return parsed.map((r) => ({
+      id: r.id ?? `med_${Date.now()}_${Math.random()}`,
+      name: r.name ?? '',
+      at: r.at ?? '',
+      takenToday: r.takenToday ?? false,
+      schedule: r.schedule ?? { kind: 'daily' },
+    }));
   } catch {
     return [];
   }
@@ -50,7 +73,7 @@ async function writeStored(reminders: readonly MedicationReminder[]): Promise<vo
 export function useMedications(): {
   readonly reminders: readonly MedicationReminder[];
   readonly loading: boolean;
-  readonly add: (name: string, at: string) => void;
+  readonly add: (name: string, at: string, schedule: ReminderSchedule) => void;
   readonly remove: (id: string) => void;
   readonly toggleTaken: (id: string) => void;
 } {
@@ -76,13 +99,13 @@ export function useMedications(): {
   }, []);
 
   const add = useCallback(
-    (name: string, at: string) => {
+    (name: string, at: string, schedule: ReminderSchedule) => {
       const trimmedName = name.trim();
       const trimmedAt = at.trim();
       if (trimmedName.length === 0 || trimmedAt.length === 0) return;
       persist([
         ...reminders,
-        { id: `med_${Date.now()}`, name: trimmedName, at: trimmedAt, takenToday: false },
+        { id: `med_${Date.now()}`, name: trimmedName, at: trimmedAt, takenToday: false, schedule },
       ]);
     },
     [persist, reminders],
