@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <!-- Four pastel corners blended across the square: pink+green on top, blue+purple on bottom — a
+         hand-authored recreation of the supplied VITALIS app-icon reference (no source raster was
+         available to this tool, so this is redrawn from the description, not traced). -->
+    <radialGradient id="vitalis-corner-tl" cx="0" cy="0" r="0.85">
+      <stop offset="0" stop-color="#FF9FC7" />
+      <stop offset="1" stop-color="#FF9FC7" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="vitalis-corner-tr" cx="1" cy="0" r="0.85">
+      <stop offset="0" stop-color="#7FE8A3" />
+      <stop offset="1" stop-color="#7FE8A3" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="vitalis-corner-bl" cx="0" cy="1" r="0.85">
+      <stop offset="0" stop-color="#6FB8FF" />
+      <stop offset="1" stop-color="#6FB8FF" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="vitalis-corner-br" cx="1" cy="1" r="0.85">
+      <stop offset="0" stop-color="#B98AF2" />
+      <stop offset="1" stop-color="#B98AF2" stop-opacity="0" />
+    </radialGradient>
+    <linearGradient id="vitalis-base" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#C9E4FF" />
+      <stop offset="1" stop-color="#E6D4FA" />
+    </linearGradient>
+    <clipPath id="vitalis-square">
+      <rect x="16" y="16" width="480" height="480" rx="128" />
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#vitalis-square)">
+    <rect x="16" y="16" width="480" height="480" fill="url(#vitalis-base)" />
+    <rect x="16" y="16" width="480" height="480" fill="url(#vitalis-corner-tl)" />
+    <rect x="16" y="16" width="480" height="480" fill="url(#vitalis-corner-tr)" />
+    <rect x="16" y="16" width="480" height="480" fill="url(#vitalis-corner-bl)" />
+    <rect x="16" y="16" width="480" height="480" fill="url(#vitalis-corner-br)" />
+  </g>
+  <rect x="16" y="16" width="480" height="480" rx="128" stroke="rgba(255,255,255,0.5)" stroke-width="2" />
+
+  <!-- Rounded plus / cross, white outline -->
+  <path
+    d="M226 120h60a14 14 0 0 1 14 14v78h78a14 14 0 0 1 14 14v60a14 14 0 0 1-14 14h-78v78a14 14 0 0 1-14 14h-60a14 14 0 0 1-14-14v-78h-78a14 14 0 0 1-14-14v-60a14 14 0 0 1 14-14h78v-78a14 14 0 0 1 14-14z"
+    stroke="#FFFFFF"
+    stroke-width="16"
+    stroke-linejoin="round"
+    fill="none"
+  />
+
+  <!-- EKG / heartbeat pulse line stroked through the cross -->
+  <path
+    d="M118 256h58l22-54 30 108 26-78 18 24h122"
+    stroke="#FFFFFF"
+    stroke-width="14"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+
+  <!-- Sparkle decoration, outside the square, bottom-right -->
+  <path
+    d="M446 400l10 26 26 10-26 10-10 26-10-26-26-10 26-10z"
+    fill="#FFFFFF"
+  />
+</svg>

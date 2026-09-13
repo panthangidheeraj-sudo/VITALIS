@@ -21,6 +21,8 @@ import { z } from 'zod';
 import type { AgentTools } from '@triage/shared';
 import { degradationOf } from '@triage/shared';
 import { requestJson } from '../adapters/http.js';
+import type { GeminiConfig } from '../adapters/gemini-vision-port.js';
+import { identifyMedicine } from '../adapters/gemini-medicine-vision.js';
 
 const lookupSchema = z.object({
   /** Names as read off the packaging, or typed by the patient. */
@@ -29,6 +31,11 @@ const lookupSchema = z.object({
 
 const referenceSchema = z.object({
   name: z.string().min(1).max(120),
+});
+
+const identifySchema = z.object({
+  /** `data:image/...;base64,...` — see gemini-medicine-vision.ts's DATA_URL guard. */
+  photoRef: z.string().min(1).max(8_000_000),
 });
 
 interface PubChemPropertyResponse {
@@ -56,8 +63,61 @@ function wrap(
   };
 }
 
-export function createMedicationRoutes(tools: AgentTools): Router {
+export function createMedicationRoutes(tools: AgentTools, gemini?: GeminiConfig): Router {
   const router = Router();
+
+  /**
+   * Camera -> medicine identification. Reuses the same Gemini vision
+   * credential/config the injury-photo endpoint already uses (see
+   * gemini-medicine-vision.ts's header) - no second AI pipeline.
+   *
+   * `gemini` is undefined when GEMINI_API_KEY isn't configured; that is an
+   * honest, expected state (same pattern as `chatPort === undefined` in
+   * routes/assistant.ts), not an error to hide behind a 500.
+   */
+  router.post(
+    '/identify',
+    wrap(async (req: Request, res: Response) => {
+      if (gemini === undefined) {
+        res.status(503).json({
+          error: 'vision_unavailable',
+          message: 'Medicine photo identification is not configured on this server.',
+        });
+        return;
+      }
+
+      const parsed = identifySchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: 'invalid_request', issues: parsed.error.issues });
+        return;
+      }
+
+      const outcome = await identifyMedicine(gemini, parsed.data.photoRef);
+      if (!outcome.ok) {
+        res.status(502).json({ error: 'identify_failed', message: outcome.message });
+        return;
+      }
+
+      // Best-effort RxNorm normalisation of whatever name was actually read
+      // off the label - never a substitute for the vision read, only extra
+      // context. Skipped entirely when nothing legible was extracted, since
+      // there is nothing to normalise.
+      let normalized: unknown;
+      if (outcome.data.productName !== undefined) {
+        const norm = await tools.medication.normalize([outcome.data.productName]);
+        if (norm.ok) {
+          normalized = norm.data;
+        }
+      }
+
+      res.json({
+        medicine: outcome.data,
+        normalized,
+        interactionsChecked: false,
+        interactionNotice: INTERACTION_NOTICE,
+      });
+    }),
+  );
 
   router.post(
     '/normalize',

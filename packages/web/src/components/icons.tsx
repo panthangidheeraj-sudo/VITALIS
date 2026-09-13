@@ -50,6 +50,25 @@ export function BloodDropIcon({ size = 26 }: { readonly size?: number }) {
   );
 }
 
+export function CapsuleIcon({ size = 26 }: { readonly size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <rect x={3} y={10} width={18} height={4} rx={2} fill="#F5A623" transform="rotate(-45 12 12)" />
+      <path d="M7.76 7.76L16.24 16.24" stroke="white" strokeWidth={1.5} strokeLinecap="round" />
+      <path d="M17 7a5 5 0 010 10H7a5 5 0 010-10h10z" stroke="#F5A623" strokeWidth={1.5} fill="none" transform="rotate(-45 12 12)" />
+    </svg>
+  );
+}
+
+export function CameraIcon({ size = 26 }: { readonly size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M4 8a2 2 0 012-2h1.5l1-1.5h7l1 1.5H18a2 2 0 012 2v9a2 2 0 01-2 2H6a2 2 0 01-2-2V8z" stroke="#1769E8" strokeWidth={1.8} strokeLinejoin="round" />
+      <circle cx={12} cy={12.5} r={3.4} stroke="#1769E8" strokeWidth={1.8} />
+    </svg>
+  );
+}
+
 export function ChevronRightSmall({ size = 12 }: { readonly size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">

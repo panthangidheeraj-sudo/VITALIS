@@ -3,18 +3,18 @@ import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { VitalsPanel } from '../components/VitalsPanel';
 import { MedicationsPanel } from '../components/MedicationsPanel';
-import { PhoneIcon, GearIcon, BandageIcon, BloodDropIcon, ChevronRightSmall } from '../components/icons';
+import { Wordmark } from '../components/Logo';
+import { PhoneIcon, GearIcon, BandageIcon, BloodDropIcon, CapsuleIcon, ChevronRightSmall } from '../components/icons';
 
 /**
  * Ported from packages/mobile/src/screens/HomeScreen.tsx's uncommitted
  * redesign: the red/blue-glass emergency banner, the vitals/medications
  * glass cards, and the feature-tile grid (icon circle + chevron badge +
  * title + sub) are the SAME components in the SAME arrangement, not a
- * generic recreation. Two differences from the mobile screen, both scoping
- * decisions: no Profile/Medicine-scanner tiles (those pages don't exist in
- * this web build) and a connection-status pill was kept (the mobile
+ * generic recreation. A connection-status pill was kept (the mobile
  * redesign dropped it, but it has real diagnostic value on the web where
- * there's no native "orchestrator unreachable" handling elsewhere).
+ * there's no native "orchestrator unreachable" handling elsewhere), and the
+ * gear icon now genuinely opens Settings instead of being decorative.
  */
 export function Home() {
   const [reachable, setReachable] = useState<boolean | undefined>(undefined);
@@ -36,6 +36,10 @@ export function Home() {
 
   return (
     <div className="page">
+      <div className="row fade-up" style={{ padding: '4px 2px 0' }}>
+        <Wordmark size={32} textSize={17} />
+      </div>
+
       {reachable === false ? (
         <div className="row glass-panel glass-panel-content fade-up" style={{ padding: '12px 16px', borderLeft: '4px solid var(--red)' }}>
           <span className="dot" style={{ background: 'var(--red)' }} />
@@ -45,23 +49,26 @@ export function Home() {
         </div>
       ) : null}
 
-      {/* Emergency button */}
-      <Link to="/emergency" className="fade-up" style={{ textDecoration: 'none', animationDelay: '40ms' }}>
-        <div style={emergencyOuterStyle}>
-          <div style={emergencyGradientStyle} />
-          <div style={emergencyContentStyle}>
+      {/* Emergency button. NOT one big <Link> — the gear used to be nested
+          inside the "Start emergency" link, so tapping it silently opened
+          Emergency instead of Settings. Two separate links sharing one
+          visual banner instead. */}
+      <div className="fade-up" style={{ ...emergencyOuterStyle, animationDelay: '40ms' }}>
+        <div style={emergencyGradientStyle} />
+        <div style={emergencyContentStyle}>
+          <Link to="/emergency" style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, textDecoration: 'none', height: '100%' }}>
             <div style={emergencyIconWrapStyle}>
               <PhoneIcon size={26} />
             </div>
             <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 17, color: 'var(--ink)', textAlign: 'center', letterSpacing: -0.3 }}>
               Start emergency
             </span>
-            <div style={settingsWrapStyle}>
-              <GearIcon size={18} />
-            </div>
-          </div>
+          </Link>
+          <Link to="/settings" aria-label="Settings" style={settingsWrapStyle}>
+            <GearIcon size={18} />
+          </Link>
         </div>
-      </Link>
+      </div>
 
       <div className="fade-up" style={{ animationDelay: '100ms' }}>
         <VitalsPanel />
@@ -74,6 +81,7 @@ export function Home() {
       <div className="grid-2 fade-up" style={{ animationDelay: '220ms' }}>
         <FeatureTile icon={<BloodDropIcon />} iconBg="rgba(255,100,100,0.12)" title="Emergency" sub="Start the triage interview" to="/emergency" />
         <FeatureTile icon={<BandageIcon />} iconBg="rgba(200,175,130,0.18)" title="First aid" sub="Works with no signal" to="/first-aid" />
+        <FeatureTile icon={<CapsuleIcon />} iconBg="rgba(255,180,50,0.14)" title="Medicine scanner" sub="Photograph a pack for its name & expiry" to="/medicine" />
       </div>
 
       <p className="foot" style={{ textAlign: 'center', marginTop: 4 }}>

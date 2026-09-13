@@ -1,6 +1,6 @@
 {
   "name": "@triage/web",
-  "version": "0.1.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "VITALIS web app — the same triage/assistant/first-aid flows as packages/mobile, ported to the browser for a Render-hosted demo that doesn't depend on Expo Go.",

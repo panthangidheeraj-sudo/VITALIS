@@ -74,6 +74,22 @@ export interface MedicationLookup {
   readonly interactionNotice: string;
 }
 
+export interface MedicineIdentification {
+  readonly productName?: string;
+  readonly strength?: string;
+  readonly expiryDateText?: string;
+  readonly manufacturer?: string;
+  readonly confidence: number;
+  readonly notes: string;
+}
+
+export interface MedicineIdentifyResult {
+  readonly medicine: MedicineIdentification;
+  readonly normalized?: MedicationLookup['medications'];
+  readonly interactionsChecked: false;
+  readonly interactionNotice: string;
+}
+
 export class ApiError extends Error {
   constructor(
     readonly status: number,
@@ -167,6 +183,12 @@ export const api = {
 
   normalizeMedications: (names: readonly string[]) =>
     request<MedicationLookup>('/medications/normalize', { names }),
+
+  /** `photoRef` is a `data:image/...;base64,...` string — never a raw file
+   * path, and never sent anywhere but this one backend endpoint, which is
+   * the only place GEMINI_API_KEY is used (see gemini-medicine-vision.ts). */
+  identifyMedicine: (photoRef: string) =>
+    request<MedicineIdentifyResult>('/medications/identify', { photoRef }),
 
   assistantChat: (message: string, history: readonly { readonly role: 'user' | 'assistant'; readonly content: string }[]) =>
     request<{

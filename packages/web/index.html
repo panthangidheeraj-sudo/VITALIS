@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>VITALIS — Adaptive Emergency Triage</title>
     <meta name="description" content="VITALIS: an autonomous, adaptive emergency triage agent. Decision support, not diagnosis." />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/assets/vitalis-logo.svg" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -13,7 +15,14 @@
     />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Static, JS-free branded loading state: React replaces #root's children on
+         mount, so this is only ever visible during the initial script fetch/parse. -->
+    <div id="root">
+      <div style="min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#F4F7FC;">
+        <img src="/assets/vitalis-logo.svg" width="64" height="64" style="border-radius:16px;" alt="" />
+        <span style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-weight:800;font-size:15px;letter-spacing:0.3px;color:#142744;">VITALIS</span>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

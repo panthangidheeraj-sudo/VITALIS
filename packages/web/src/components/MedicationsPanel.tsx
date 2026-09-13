@@ -9,7 +9,7 @@ import { AddPill } from './VitalsPanel';
  * (the mobile version's per-date scheduling + week-strip calendar was out
  * of scope for this pass — this is a scoping decision, not a missed port). */
 export function MedicationsPanel() {
-  const { reminders, add, toggleTaken } = useMedications();
+  const { reminders, add, remove, toggleTaken } = useMedications();
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [at, setAt] = useState('');
@@ -62,23 +62,47 @@ export function MedicationsPanel() {
         ) : (
           <>
             <div>
+              {/*
+               * The reminder row used to BE a single <button onClick={toggleTaken}>
+               * with no other control anywhere on it or the panel — `remove()`
+               * already existed and worked correctly in the store below (it
+               * filters the array and persists via the effect on `reminders`),
+               * it was simply never wired to anything in this UI. That was the
+               * entire "can't delete a reminder" bug: not a storage bug, a
+               * missing button. Two separate interactive elements now (HTML
+               * doesn't allow a <button> inside a <button>).
+               */}
               {reminders.map((r, i) => (
-                <button
+                <div
                   key={r.id}
-                  onClick={() => toggleTaken(r.id)}
                   className="row"
-                  style={{ width: '100%', justifyContent: 'space-between', border: 'none', background: 'transparent', padding: '14px 0', borderTop: i > 0 ? '1px solid var(--divider)' : undefined, cursor: 'pointer', textAlign: 'left' }}
+                  style={{ justifyContent: 'space-between', padding: '12px 0', borderTop: i > 0 ? '1px solid var(--divider)' : undefined }}
                 >
-                  <div>
-                    <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{r.name}</div>
-                    <div className="small" style={{ marginTop: 2 }}>{r.at}</div>
-                  </div>
-                  <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 10, letterSpacing: 0.6, color: r.takenToday ? 'var(--ok)' : 'var(--warn)' }}>
-                    {r.takenToday ? 'TAKEN' : 'DUE'}
-                  </span>
-                </button>
+                  <button
+                    onClick={() => toggleTaken(r.id)}
+                    className="row"
+                    style={{ flex: 1, justifyContent: 'space-between', border: 'none', background: 'transparent', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    <div>
+                      <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{r.name}</div>
+                      <div className="small" style={{ marginTop: 2 }}>{r.at}</div>
+                    </div>
+                    <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 10, letterSpacing: 0.6, color: r.takenToday ? 'var(--ok)' : 'var(--warn)' }}>
+                      {r.takenToday ? 'TAKEN' : 'DUE'}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm(`Remove "${r.name}"?`)) remove(r.id);
+                    }}
+                    aria-label={`Remove ${r.name}`}
+                    style={{ marginLeft: 10, width: 26, height: 26, borderRadius: 13, border: 'none', background: 'rgba(220,38,38,0.1)', color: 'var(--danger-deep)', fontSize: 14, lineHeight: 1, cursor: 'pointer', flex: 'none' }}
+                  >
+                    ×
+                  </button>
+                </div>
               ))}
-              <p className="foot" style={{ paddingTop: 2 }}>Tap to mark taken</p>
+              <p className="foot" style={{ paddingTop: 2 }}>Tap to mark taken · use × to remove</p>
             </div>
             <div style={{ marginTop: 10 }}>
               <AddPill onClick={() => setAdding(true)} label="Add a reminder" />

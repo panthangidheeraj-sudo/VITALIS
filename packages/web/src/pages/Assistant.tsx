@@ -5,6 +5,15 @@ import { api, ApiError, resolveOwnerUid, type CaseSummary, type TurnResponse } f
 import { HoldButton } from '../components/HoldButton';
 import { FloatingLines } from '../components/FloatingLines';
 import { AssistantOrb } from '../components/AssistantOrb';
+import {
+  createSession,
+  getActiveSessionId,
+  getSession,
+  listSessions,
+  saveSession,
+  setActiveSessionId,
+  type ChatSession,
+} from '../data/chatHistoryStore';
 
 /**
  * Ported from packages/mobile/src/screens/AssistantScreen.tsx — same rule:
@@ -39,18 +48,65 @@ const OPENING: Message = {
   text: 'Ask me anything about your health, your readings, or your medication. If what you describe sounds urgent I will stop and move you to the triage interview instead — that is deliberate.',
 };
 
+/** Loads the active session (or creates one) exactly once per mount, never on
+ * every render — a lazy useState initializer, not an effect, so it can never
+ * fire a second time and silently replace live state. */
+function loadInitialSession(): ChatSession {
+  const activeId = getActiveSessionId();
+  const active = activeId === undefined ? undefined : getSession(activeId);
+  return active ?? createSession();
+}
+
 export function Assistant() {
-  const [messages, setMessages] = useState<readonly Message[]>([OPENING]);
+  const [session, setSession] = useState<ChatSession>(loadInitialSession);
+  const [messages, setMessages] = useState<readonly Message[]>(session.messages.length > 0 ? session.messages : [OPENING]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  const [caseId, setCaseId] = useState<CaseId | undefined>(undefined);
-  const [summary, setSummary] = useState<CaseSummary | undefined>(undefined);
+  const [caseId, setCaseId] = useState<CaseId | undefined>(session.caseId as CaseId | undefined);
+  const [summary, setSummary] = useState<CaseSummary | undefined>(session.summary as CaseSummary | undefined);
+  const [showHistory, setShowHistory] = useState(false);
+  const [historyList, setHistoryList] = useState<readonly ChatSession[]>([]);
   const threadEnd = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     threadEnd.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Persists on every change — this, not an unmount handler, is what makes
+  // "leave normally, come back" and "refresh the browser" both work: the
+  // component can be torn down at any point (navigation, reload) with no
+  // cleanup step, because the latest state was already written.
+  useEffect(() => {
+    saveSession({ id: session.id, messages, caseId, summary });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session.id, messages, caseId, summary]);
+
+  const startNewChat = useCallback(() => {
+    const fresh = createSession();
+    setSession(fresh);
+    setMessages([OPENING]);
+    setCaseId(undefined);
+    setSummary(undefined);
+    setDraft('');
+    setShowHistory(false);
+  }, []);
+
+  const openHistory = useCallback(() => {
+    setHistoryList(listSessions());
+    setShowHistory(true);
+  }, []);
+
+  const openSession = useCallback((id: string) => {
+    const target = getSession(id);
+    if (target === undefined) return;
+    setActiveSessionId(id);
+    setSession(target);
+    setMessages(target.messages.length > 0 ? target.messages : [OPENING]);
+    setCaseId(target.caseId as CaseId | undefined);
+    setSummary(target.summary as CaseSummary | undefined);
+    setShowHistory(false);
+  }, []);
 
   const appendAgent = useCallback((text: string, meta?: string) => {
     setMessages((prev) => [...prev, { id: `a${Date.now()}${Math.random()}`, who: 'agent', text, ...(meta === undefined ? {} : { meta }) }]);
@@ -159,20 +215,73 @@ export function Assistant() {
       />
       <div className="row fade-up" style={{ justifyContent: 'space-between', position: 'relative' }}>
         <h1 className="h1">Assistant</h1>
-        {summary !== undefined ? (
-          <span
+        <div className="row" style={{ gap: 8 }}>
+          {summary !== undefined ? (
+            <span
+              className="pill"
+              style={{
+                background: tierColor(summary.riskTier),
+                color: '#fff',
+                borderColor: 'transparent',
+                cursor: 'default',
+              }}
+            >
+              {summary.riskTier.toUpperCase()}
+            </span>
+          ) : null}
+          <button
+            onClick={openHistory}
             className="pill"
-            style={{
-              background: tierColor(summary.riskTier),
-              color: '#fff',
-              borderColor: 'transparent',
-              cursor: 'default',
-            }}
+            style={{ background: 'transparent', color: 'var(--muted)', cursor: 'pointer' }}
           >
-            {summary.riskTier.toUpperCase()}
-          </span>
-        ) : null}
+            History
+          </button>
+          <button
+            onClick={startNewChat}
+            className="pill"
+            style={{ background: 'transparent', color: 'var(--primary)', cursor: 'pointer' }}
+          >
+            New chat
+          </button>
+        </div>
       </div>
+
+      {showHistory ? (
+        <div className="glass card fade-up" style={{ position: 'relative', maxHeight: 260, overflowY: 'auto' }}>
+          <div className="row" style={{ justifyContent: 'space-between', marginBottom: 8 }}>
+            <div className="label">Previous conversations</div>
+            <button onClick={() => setShowHistory(false)} style={{ background: 'none', border: 'none', color: 'var(--muted)', cursor: 'pointer', fontSize: 12 }}>
+              Close
+            </button>
+          </div>
+          {historyList.length === 0 ? (
+            <p className="small">No previous conversations yet.</p>
+          ) : (
+            historyList.map((s, i) => (
+              <button
+                key={s.id}
+                onClick={() => openSession(s.id)}
+                className="row"
+                style={{
+                  width: '100%',
+                  justifyContent: 'space-between',
+                  padding: '10px 0',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  borderBottom: 'none',
+                  borderTop: i > 0 ? '1px solid var(--divider)' : 'none',
+                  background: s.id === session.id ? 'rgba(23,105,232,0.06)' : 'transparent',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 600, fontSize: 13, color: 'var(--ink)' }}>{s.title}</span>
+                <span className="small">{new Date(s.updatedAt).toLocaleDateString()}</span>
+              </button>
+            ))
+          )}
+        </div>
+      ) : null}
 
       {messages.length <= 1 ? (
         <div style={{ position: 'relative', textAlign: 'center' }}>

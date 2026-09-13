@@ -46,7 +46,12 @@ export function createApp({ tools, config, firestoreEnabled }: AppDeps): Express
       origin: config.corsAllowedOrigins === undefined ? true : [...config.corsAllowedOrigins],
     }),
   );
-  app.use(express.json({ limit: '1mb' }));
+  // '1mb' was too small for a base64-encoded photo (injury photos and now
+  // medicine-pack photos both go through this same JSON body) - a real
+  // phone photo, even compressed, routinely exceeds that once base64's
+  // ~33% overhead is added, and the previous limit would have silently
+  // rejected exactly the uploads these features exist for.
+  app.use(express.json({ limit: '10mb' }));
 
   /**
    * Capability report, not just a liveness ping.
@@ -73,7 +78,15 @@ export function createApp({ tools, config, firestoreEnabled }: AppDeps): Express
   });
 
   app.use('/cases', createCaseRoutes(tools));
-  app.use('/medications', createMedicationRoutes(tools));
+  app.use(
+    '/medications',
+    createMedicationRoutes(
+      tools,
+      config.gemini.enabled
+        ? { apiKey: config.gemini.apiKey as string, baseUrl: config.gemini.baseUrl, visionModel: config.gemini.visionModel }
+        : undefined,
+    ),
+  );
   app.use('/hospitals', createHospitalRoutes(tools));
   app.use('/assistant', createAssistantRoutes(chatPort, tools.knowledge));
   app.use(errorHandler);
