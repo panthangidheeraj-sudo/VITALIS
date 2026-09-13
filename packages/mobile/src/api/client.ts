@@ -164,6 +164,7 @@ export const api = {
       clinicalScorer: string;
       visionEnabled?: boolean;
       reasoningEnabled?: boolean;
+      generalChatEnabled?: boolean;
       notificationsLive?: boolean;
     }>('/health'),
 
@@ -311,4 +312,15 @@ export const api = {
     request<{ hospitals: readonly Hospital[] }>(
       `/hospitals/nearby?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}&limit=${limit}`,
     ),
+
+  /**
+   * General conversational chat — separate from the triage endpoints above.
+   * `history` is the last few turns for context, not a full transcript; see
+   * `routes/assistant.ts` for why this never touches case state.
+   */
+  assistantChat: (message: string, history: readonly { readonly role: 'user' | 'assistant'; readonly content: string }[]) =>
+    request<{
+      readonly reply: string;
+      readonly citation?: { readonly provider?: string; readonly title?: string; readonly url?: string };
+    }>('/assistant/chat', { message, history }),
 };

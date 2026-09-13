@@ -23,8 +23,16 @@
  * ONCE A CASE IS OPEN, EVERY MESSAGE IN THIS CHAT IS A TURN ON IT — not just
  * the one that triggered it. "Hi" after "I have chest pain" is not small talk
  * anymore; it is the next thing the interview heard, and it has to reach the
- * scorer like anything else the patient says. The small-talk detector below
- * only ever runs BEFORE a case exists, for exactly this reason.
+ * scorer like anything else the patient says. `needsTriage()` below only ever
+ * runs BEFORE a case exists, for exactly this reason — once one exists, every
+ * message goes straight to `api.submitText`, never to the general-chat
+ * endpoint.
+ *
+ * BEFORE A CASE EXISTS, GENERAL CHAT IS REAL — not a canned refusal. Anything
+ * that doesn't trip `needsTriage()` goes to `api.assistantChat`, a plain Groq
+ * conversation grounded in MedlinePlus/Wikipedia when the topic matches one.
+ * See `routes/assistant.ts` on the server for why that is a separate port
+ * from the triage-scoped `ReasoningPort` rather than a widening of it.
  *
  * THE TIER SHOWN HERE IS THE SAME TIER, not a chat-only estimate. It comes
  * from `buildCaseView` over the same live `CaseState` EmergencyScreen reads —
@@ -50,6 +58,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -97,25 +106,6 @@ function needsTriage(text: string): boolean {
   return ESCALATE_TERMS.some((term) => lower.includes(term));
 }
 
-/**
- * Small talk gets a small-talk answer, not the "I cannot answer general
- * health questions yet" deflection. Only ever consulted before a case exists
- * — see the file header for why "hi" mid-interview is not small talk.
- */
-const GREETING_PATTERN = /^\s*(hi|hello|hey|yo|hii+|hiya|good\s?(morning|afternoon|evening)|thanks?|thank\s?you|ty|bye|goodbye|ok|okay)\s*[!.]*\s*$/i;
-
-function greetingReply(text: string): string | undefined {
-  if (!GREETING_PATTERN.test(text)) return undefined;
-  const lower = text.toLowerCase();
-  if (/thank/.test(lower) || lower === 'ty') {
-    return "You're welcome. I'm here if anything comes up — and if it's urgent, say so and I'll start tracking it as a case.";
-  }
-  if (/bye|goodbye/.test(lower)) {
-    return 'Take care. Your emergency card and first aid guides stay available offline any time.';
-  }
-  return 'Hi — ask me about a reading, a medication, or how you are feeling. If it sounds urgent I will start a case and track it properly.';
-}
-
 export function AssistantScreen({
   onOpenFullCase,
 }: {
@@ -141,6 +131,18 @@ export function AssistantScreen({
       requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: false }));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // The keyboard opening resizes the thread (via KeyboardAvoidingView below),
+  // which without this leaves the scroll position wherever it happened to be
+  // — often with the latest message now hidden behind the composer/keyboard
+  // boundary. `keyboardWillShow` fires before the animation on iOS so the
+  // scroll lands in step with it; Android has no "will" event, only "did".
+  useEffect(() => {
+    const sub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => {
+      requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
+    });
+    return () => sub.remove();
   }, []);
 
   const appendAgent = useCallback(
@@ -213,15 +215,31 @@ export function AssistantScreen({
       return;
     }
 
-    // NO CASE YET: decide whether this message starts one.
+    // NO CASE YET: decide whether this message starts one. The keyword gate
+    // is the ONLY thing that decides escalation — Groq is never asked and
+    // has no path to override it either way.
     const escalate = needsTriage(text);
     if (!escalate) {
-      const greeting = greetingReply(text);
-      appendAgent(
-        greeting ??
-          'I cannot answer general health questions yet — the assistant is not wired to a knowledge endpoint in this build, and I would rather say so than make something up. If this is about symptoms you are having right now, tell me and I will start tracking it as a case.',
-        greeting === undefined ? 'General chat: not available · triage: available' : undefined,
-      );
+      setBusy(true);
+      try {
+        // Last few turns for context, not a transcript dump — see
+        // api/client.ts's assistantChat for why this never touches case state.
+        const history = messages.slice(-8).map((m) => ({
+          role: m.who === 'user' ? ('user' as const) : ('assistant' as const),
+          content: m.text,
+        }));
+        const result = await api.assistantChat(text, history);
+        appendAgent(
+          result.reply,
+          result.citation?.title === undefined ? undefined : `Source: ${result.citation.title}`,
+        );
+      } catch (err) {
+        appendAgent(
+          err instanceof ApiError ? err.message : 'Could not reach the assistant. Try again in a moment.',
+        );
+      } finally {
+        setBusy(false);
+      }
       return;
     }
 
@@ -240,7 +258,7 @@ export function AssistantScreen({
     } finally {
       setBusy(false);
     }
-  }, [applyTurn, appendAgent, busy, caseId, draft, openCase, setDraft, setMessages]);
+  }, [applyTurn, appendAgent, busy, caseId, draft, messages, openCase, setDraft, setMessages]);
 
   const confirm = useCallback(
     async (heldMs: number) => {
@@ -267,7 +285,7 @@ export function AssistantScreen({
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <WaveField />
 

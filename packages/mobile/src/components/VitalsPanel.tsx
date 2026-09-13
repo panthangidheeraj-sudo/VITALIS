@@ -1,19 +1,23 @@
 /**
- * Manually-entered vitals — see `data/vitalsStore.ts` for why this replaced
- * the animated bar chart / ECG trace / filling ring that used to sit here.
+ * Manually-entered vitals panel — redesigned to match reference UI.
  *
- * Two states only: nothing logged yet (an honest empty state, not a fabricated
- * number), and a logged reading shown with WHEN it was entered. Editing is a
- * single form for all four values rather than four separate inline editors —
- * someone transcribing numbers off a home BP cuff and a glucometer is doing
- * it once, in one sitting, not field by field.
+ * Shows heading + "Log a reading" action, supporting text, and
+ * either an "+ Add a reading" pill button (empty state) or the readings grid.
  */
 
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BlurView } from 'expo-blur';
 import { useVitals, type VitalsReading } from '../data/vitalsStore';
 import { Glass, Label, PrimaryButton, SecondaryButton } from '../ui/primitives';
 import { colors, fonts, radius, spacing, type } from '../theme';
+
+// Design tokens
+const D = {
+  text: '#142744',
+  muted: '#7185A3',
+  primary: '#1769E8',
+} as const;
 
 export function VitalsPanel() {
   const { vitals, loading, save } = useVitals();
@@ -59,19 +63,24 @@ export function VitalsPanel() {
 
   return (
     <View>
+      {/* Header row */}
       <View style={styles.sectionHead}>
-        <Text style={type.h3}>Your vitals</Text>
+        <Text style={styles.heading}>Your vitals</Text>
         {!editing ? (
           <Pressable onPress={() => setEditing(true)} hitSlop={8}>
-            <Text style={styles.editLink}>{hasAnyReading ? 'Edit' : 'Log a reading'}</Text>
+            <View style={styles.logReadingBtn}>
+              <Text style={styles.logReadingText}>{hasAnyReading ? 'Edit' : 'Log a reading'}</Text>
+            </View>
           </Pressable>
         ) : null}
       </View>
-      <Text style={[type.foot, { marginTop: -6, marginBottom: 9 }]}>
-        Entered by you from your own BP cuff, glucometer or oximeter — nothing here is read from a
-        connected device.
+
+      {/* Supporting text */}
+      <Text style={styles.supportingText}>
+        {'Enter by you from your own BP cuff, glucometer or oximeter\n— nothing here is read from a connected device.'}
       </Text>
 
+      {/* Content */}
       {editing ? (
         <Glass tone="blue" contentStyle={styles.editCard}>
           <View style={styles.row}>
@@ -89,21 +98,42 @@ export function VitalsPanel() {
           </View>
         </Glass>
       ) : !hasAnyReading ? (
-        // Minimal on purpose (P2 #6): an empty state is not an occasion for a
-        // full card explaining itself in two sentences. One tappable line.
-        <Pressable onPress={() => setEditing(true)} style={styles.emptyRow} hitSlop={6}>
-          <Text style={styles.emptyPlus}>＋</Text>
-          <Text style={styles.emptyLabel}>Add a reading</Text>
+        // "+ Add a reading" pill button — matches reference design
+        <Pressable onPress={() => setEditing(true)} hitSlop={6}>
+          {({ pressed }) => (
+            <View style={[styles.addReadingPill, pressed && { opacity: 0.8 }]}>
+              <BlurView intensity={18} tint="light" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+              <View style={styles.addReadingTint} />
+              <View style={styles.addPlusCircle}>
+                <Text style={styles.addPlusText}>+</Text>
+              </View>
+              <Text style={styles.addReadingLabel}>Add a reading</Text>
+            </View>
+          )}
         </Pressable>
       ) : (
-        <View style={styles.grid}>
-          {vitals.bpSys !== undefined ? (
-            <Tile label="BLOOD PRESSURE" value={`${vitals.bpSys}${vitals.bpDia === undefined ? '' : `/${vitals.bpDia}`}`} unit="mmHg" />
-          ) : null}
-          {vitals.heartRate !== undefined ? <Tile label="HEART RATE" value={String(vitals.heartRate)} unit="bpm" /> : null}
-          {vitals.spo2 !== undefined ? <Tile label="SPO₂" value={String(vitals.spo2)} unit="%" /> : null}
-          {vitals.glucose !== undefined ? <Tile label="BLOOD GLUCOSE" value={String(vitals.glucose)} unit="mg/dL" /> : null}
-        </View>
+        <>
+          <View style={styles.grid}>
+            {vitals.bpSys !== undefined ? (
+              <Tile label="BLOOD PRESSURE" value={`${vitals.bpSys}${vitals.bpDia === undefined ? '' : `/${vitals.bpDia}`}`} unit="mmHg" />
+            ) : null}
+            {vitals.heartRate !== undefined ? <Tile label="HEART RATE" value={String(vitals.heartRate)} unit="bpm" /> : null}
+            {vitals.spo2 !== undefined ? <Tile label="SPO₂" value={String(vitals.spo2)} unit="%" /> : null}
+            {vitals.glucose !== undefined ? <Tile label="BLOOD GLUCOSE" value={String(vitals.glucose)} unit="mg/dL" /> : null}
+          </View>
+          <Pressable onPress={() => setEditing(true)} hitSlop={6} style={{ marginTop: 10 }}>
+            {({ pressed }) => (
+              <View style={[styles.addReadingPill, pressed && { opacity: 0.8 }]}>
+                <BlurView intensity={18} tint="light" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+                <View style={styles.addReadingTint} />
+                <View style={styles.addPlusCircle}>
+                  <Text style={styles.addPlusText}>+</Text>
+                </View>
+                <Text style={styles.addReadingLabel}>Add a reading</Text>
+              </View>
+            )}
+          </Pressable>
+        </>
       )}
 
       {hasAnyReading && !editing && vitals.loggedAt !== undefined ? (
@@ -161,15 +191,79 @@ function formatWhen(iso: string): string {
 }
 
 const styles = StyleSheet.create({
-  sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  editLink: { fontFamily: fonts.sansBold, fontSize: 12.5, color: colors.brand },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  heading: {
+    fontFamily: fonts.sansBold,
+    fontSize: 16,
+    color: '#142744',
+    letterSpacing: -0.3,
+  },
+  logReadingBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 999,
+    backgroundColor: 'rgba(23,105,232,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(23,105,232,0.20)',
+  },
+  logReadingText: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 12,
+    color: '#1769E8',
+  },
+  supportingText: {
+    fontFamily: fonts.sans,
+    fontSize: 11.5,
+    color: '#7185A3',
+    lineHeight: 16,
+    marginBottom: 14,
+  },
+
+  // Add reading pill
+  addReadingPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.80)',
+    gap: 8,
+  },
+  addReadingTint: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(23,105,232,0.14)',
+  },
+  addPlusCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#1769E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addPlusText: {
+    fontFamily: fonts.sansBold,
+    fontSize: 16,
+    color: 'white',
+    lineHeight: 20,
+    marginTop: -1,
+  },
+  addReadingLabel: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 13,
+    color: '#1769E8',
+  },
+
+  // Grid of readings
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
   tileFlex: { width: '48%', flexGrow: 1 },
   tile: { padding: 14 },
   unit: { fontFamily: fonts.sans, fontSize: 13, color: colors.slate },
-  emptyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
-  emptyPlus: { fontFamily: fonts.sansBold, fontSize: 15, color: colors.brand },
-  emptyLabel: { fontFamily: fonts.sansSemi, fontSize: 13, color: colors.brand },
+
+  // Edit form
   editCard: { padding: spacing.xl, gap: spacing.md },
   row: { flexDirection: 'row', gap: spacing.md },
   field: { flex: 1 },
@@ -184,5 +278,5 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   editActions: { flexDirection: 'row', gap: spacing.md, marginTop: spacing.xs },
-  loggedAt: { ...type.foot, marginTop: 8 },
+  loggedAt: { ...type.foot, marginTop: 10 },
 });

@@ -1,20 +1,12 @@
 /**
- * Medication reminders — real, user-entered, persisted. See
- * `data/medicationStore.ts` for why the old hardcoded list had to go.
+ * Medication reminders panel — redesigned to match reference UI.
  *
- * EACH REMINDER PICKS ITS OWN SCHEDULE when added — Daily, or specific
- * dates (a comma-separated `YYYY-MM-DD` list; there is no native date-picker
- * dependency in this build, so this is the same plain-text-field pattern the
- * Profile screen uses for allergies/medications, not a placeholder). The week
- * strip reads `isDueOn` per reminder, so a dated reminder only lights up the
- * days it is actually due — a real calendar view, not a decoration.
- *
- * Minimal empty state, matching VitalsPanel and P2 #6: nothing logged is one
- * tappable line, not a card explaining itself.
+ * Shows "Medication reminders" heading and a pill "+ Add a reminder" button.
  */
 
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { BlurView } from 'expo-blur';
 import {
   isDueOn,
   toDateKey,
@@ -99,8 +91,9 @@ export function MedicationsPanel() {
 
   return (
     <View>
+      {/* Header */}
       <View style={styles.sectionHead}>
-        <Text style={type.h3}>Medication reminders</Text>
+        <Text style={styles.heading}>Medication reminders</Text>
         {reminders.length > 0 && !adding ? (
           <Pressable onPress={() => setAdding(true)} hitSlop={8}>
             <Text style={styles.addLink}>Add</Text>
@@ -169,44 +162,75 @@ export function MedicationsPanel() {
           </View>
         </Glass>
       ) : reminders.length === 0 ? (
-        <Pressable onPress={() => setAdding(true)} style={styles.emptyRow} hitSlop={6}>
-          <Text style={styles.emptyPlus}>＋</Text>
-          <Text style={styles.emptyLabel}>Add a reminder</Text>
+        // "+ Add a reminder" pill — matches reference design
+        <Pressable onPress={() => setAdding(true)} hitSlop={6}>
+          {({ pressed }) => (
+            <View style={[styles.addReminderPill, pressed && { opacity: 0.8 }]}>
+              <BlurView intensity={18} tint="light" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+              <View style={styles.addReminderTint} />
+              <View style={styles.addPlusCircle}>
+                <Text style={styles.addPlusText}>+</Text>
+              </View>
+              <Text style={styles.addReminderLabel}>Add a reminder</Text>
+            </View>
+          )}
         </Pressable>
       ) : (
-        <Glass tone="blue" contentStyle={styles.listCard}>
-          {reminders.map((reminder, i) => (
-            <Pressable
-              key={reminder.id}
-              onPress={() => toggleTaken(reminder.id)}
-              onLongPress={() => remove(reminder.id)}
-              style={[styles.row2, i > 0 ? styles.rowDivider : null]}
-            >
-              <View style={{ flex: 1 }}>
-                <Text style={styles.reminderName}>{reminder.name}</Text>
-                <Text style={[type.small, { marginTop: 2 }]}>
-                  {`${reminder.at} · ${scheduleLabel(reminder.schedule)}`}
-                </Text>
-              </View>
-              <Text
-                style={[
-                  styles.reminderState,
-                  { color: reminder.takenToday ? colors.ok : isDueOn(reminder, today) ? colors.warn : colors.faint },
-                ]}
+        <>
+          <Glass tone="blue" contentStyle={styles.listCard}>
+            {reminders.map((reminder, i) => (
+              <Pressable
+                key={reminder.id}
+                onPress={() => toggleTaken(reminder.id)}
+                onLongPress={() => remove(reminder.id)}
+                style={[styles.row2, i > 0 ? styles.rowDivider : null]}
               >
-                {reminder.takenToday ? 'TAKEN' : isDueOn(reminder, today) ? 'DUE' : 'NOT TODAY'}
-              </Text>
-            </Pressable>
-          ))}
-          <Text style={styles.hint}>Tap to mark taken · hold to remove</Text>
-        </Glass>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.reminderName}>{reminder.name}</Text>
+                  <Text style={[type.small, { marginTop: 2 }]}>
+                    {`${reminder.at} · ${scheduleLabel(reminder.schedule)}`}
+                  </Text>
+                </View>
+                <Text
+                  style={[
+                    styles.reminderState,
+                    { color: reminder.takenToday ? colors.ok : isDueOn(reminder, today) ? colors.warn : colors.faint },
+                  ]}
+                >
+                  {reminder.takenToday ? 'TAKEN' : isDueOn(reminder, today) ? 'DUE' : 'NOT TODAY'}
+                </Text>
+              </Pressable>
+            ))}
+            <Text style={styles.hint}>Tap to mark taken · hold to remove</Text>
+          </Glass>
+          <Pressable onPress={() => setAdding(true)} hitSlop={6} style={{ marginTop: 10 }}>
+            {({ pressed }) => (
+              <View style={[styles.addReminderPill, pressed && { opacity: 0.8 }]}>
+                <BlurView intensity={18} tint="light" blurMethod="dimezisBlurView" style={StyleSheet.absoluteFill} />
+                <View style={styles.addReminderTint} />
+                <View style={styles.addPlusCircle}>
+                  <Text style={styles.addPlusText}>+</Text>
+                </View>
+                <Text style={styles.addReminderLabel}>Add a reminder</Text>
+              </View>
+            )}
+          </Pressable>
+        </>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 9 },
+  sectionHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  heading: {
+    fontFamily: fonts.sansBold,
+    fontSize: 16,
+    color: '#142744',
+    letterSpacing: -0.3,
+  },
+  addLink: { fontFamily: fonts.sansBold, fontSize: 12.5, color: '#1769E8' },
+
   weekRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
   dayCell: { alignItems: 'center', gap: 5 },
   dayLabel: { fontFamily: fonts.monoMedium, fontSize: 9.5, color: colors.label },
@@ -216,16 +240,54 @@ const styles = StyleSheet.create({
   dayNumTextToday: { color: colors.white, fontFamily: fonts.sansBold },
   dueDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: 'transparent' },
   dueDotOn: { backgroundColor: colors.warn },
-  addLink: { fontFamily: fonts.sansBold, fontSize: 12.5, color: colors.brand },
-  emptyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
-  emptyPlus: { fontFamily: fonts.sansBold, fontSize: 15, color: colors.brand },
-  emptyLabel: { fontFamily: fonts.sansSemi, fontSize: 13, color: colors.brand },
+
+  // Add reminder pill
+  addReminderPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.80)',
+    gap: 8,
+  },
+  addReminderTint: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(23,105,232,0.14)',
+  },
+  addPlusCircle: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#1769E8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addPlusText: {
+    fontFamily: fonts.sansBold,
+    fontSize: 16,
+    color: 'white',
+    lineHeight: 20,
+    marginTop: -1,
+  },
+  addReminderLabel: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 13,
+    color: '#1769E8',
+  },
+
+  // Reminders list
   listCard: { paddingHorizontal: spacing.xl, paddingVertical: 5 },
   row2: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: 14 },
   rowDivider: { borderTopWidth: 1, borderTopColor: colors.divider },
   reminderName: { fontFamily: fonts.sansSemi, fontSize: 13, color: colors.ink },
   reminderState: { fontFamily: fonts.monoBold, fontSize: 10, letterSpacing: 0.6 },
   hint: { ...type.foot, paddingBottom: 10, paddingTop: 2 },
+
+  // Add form
   addCard: { padding: spacing.xl, gap: spacing.md },
   row: { flexDirection: 'row', gap: spacing.md },
   input: {

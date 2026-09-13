@@ -316,7 +316,7 @@ export function glassTint(tone: GlassTone = 'plain'): ViewStyle {
 type Stops = readonly [string, string, ...string[]];
 
 export const pageWash: { colors: Stops; start: { x: number; y: number }; end: { x: number; y: number } } = {
-  colors: ['#f2f7fd', '#e4edfa', '#d9e6f7'],
+  colors: ['#ffffff', '#f7faff', '#eef5ff'],
   start: { x: 0.1, y: 0 },
   end: { x: 0.9, y: 1 },
 };

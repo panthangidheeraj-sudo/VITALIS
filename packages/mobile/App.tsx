@@ -186,7 +186,7 @@ function AppShell() {
 
   return (
     <SafeAreaView style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor="#eef3fa" />
+      <StatusBar barStyle="dark-content" backgroundColor="#f7faff" />
 
       <Screen
         tab={activeTab}
@@ -325,5 +325,5 @@ function AppShell() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: '#eef3fa' },
+  root: { flex: 1, backgroundColor: '#f7faff' },
 });
