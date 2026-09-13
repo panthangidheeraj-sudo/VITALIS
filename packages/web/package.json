@@ -15,11 +15,13 @@
     "@triage/shared": "*",
     "react": "19.2.3",
     "react-dom": "19.2.3",
-    "react-router-dom": "^6.28.0"
+    "react-router-dom": "^6.28.0",
+    "three": "0.169.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
     "@types/react-dom": "~19.2.1",
+    "@types/three": "0.169.0",
     "@vitejs/plugin-react": "^4.3.4",
     "typescript": "^5.7.2",
     "vite": "^5.4.11"

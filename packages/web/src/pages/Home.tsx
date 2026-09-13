@@ -46,7 +46,7 @@ export function Home() {
       ) : null}
 
       {/* Emergency button */}
-      <Link to="/emergency" className="fade-up" style={{ textDecoration: 'none' }}>
+      <Link to="/emergency" className="fade-up" style={{ textDecoration: 'none', animationDelay: '40ms' }}>
         <div style={emergencyOuterStyle}>
           <div style={emergencyGradientStyle} />
           <div style={emergencyContentStyle}>
@@ -63,15 +63,15 @@ export function Home() {
         </div>
       </Link>
 
-      <div className="fade-up" style={{ animationDelay: '60ms' }}>
+      <div className="fade-up" style={{ animationDelay: '100ms' }}>
         <VitalsPanel />
       </div>
 
-      <div className="fade-up" style={{ animationDelay: '120ms' }}>
+      <div className="fade-up" style={{ animationDelay: '160ms' }}>
         <MedicationsPanel />
       </div>
 
-      <div className="grid-2 fade-up" style={{ animationDelay: '180ms' }}>
+      <div className="grid-2 fade-up" style={{ animationDelay: '220ms' }}>
         <FeatureTile icon={<BloodDropIcon />} iconBg="rgba(255,100,100,0.12)" title="Emergency" sub="Start the triage interview" to="/emergency" />
         <FeatureTile icon={<BandageIcon />} iconBg="rgba(200,175,130,0.18)" title="First aid" sub="Works with no signal" to="/first-aid" />
       </div>

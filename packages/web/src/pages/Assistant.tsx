@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import type { CaseId } from '@triage/shared';
 import { api, ApiError, resolveOwnerUid, type CaseSummary, type TurnResponse } from '../api/client';
 import { HoldButton } from '../components/HoldButton';
-import { WaveField } from '../components/WaveField';
+import { FloatingLines } from '../components/FloatingLines';
+import { AssistantOrb } from '../components/AssistantOrb';
 
 /**
  * Ported from packages/mobile/src/screens/AssistantScreen.tsx — same rule:
@@ -147,7 +148,15 @@ export function Assistant() {
 
   return (
     <div className="page" style={{ paddingBottom: 140, position: 'relative' }}>
-      <WaveField />
+      <FloatingLines
+        enabledWaves={['top', 'middle', 'bottom']}
+        lineCount={[10, 15, 20]}
+        lineDistance={[8, 6, 4]}
+        bendRadius={5.0}
+        bendStrength={-0.5}
+        interactive
+        parallax
+      />
       <div className="row fade-up" style={{ justifyContent: 'space-between', position: 'relative' }}>
         <h1 className="h1">Assistant</h1>
         {summary !== undefined ? (
@@ -164,6 +173,20 @@ export function Assistant() {
           </span>
         ) : null}
       </div>
+
+      {messages.length <= 1 ? (
+        <div style={{ position: 'relative', textAlign: 'center' }}>
+          <AssistantOrb />
+          <div className="label fade-up" style={{ animationDelay: '700ms', letterSpacing: '0.15em' }}>
+            VITALIS AI ASSISTANT
+          </div>
+          <p className="fade-up" style={{ animationDelay: '780ms', fontFamily: 'var(--font-serif)', fontSize: 22, color: 'var(--ink)', marginTop: 6 }}>
+            How can I
+            <br />
+            help you today?
+          </p>
+        </div>
+      ) : null}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'relative' }}>
         {messages.map((m) => (
@@ -185,6 +208,17 @@ export function Assistant() {
             {m.meta !== undefined ? <div className="foot" style={{ marginTop: 3 }}>{m.meta}</div> : null}
           </div>
         ))}
+        {busy ? (
+          <div style={{ display: 'flex', justifyContent: 'flex-start' }}>
+            <div className="glass card-pop" style={{ padding: '11px 16px', borderRadius: 16 }}>
+              <span className="glass-loading" style={{ color: 'var(--primary)' }}>
+                <span className="dot-beat" />
+                <span className="dot-beat" />
+                <span className="dot-beat" />
+              </span>
+            </div>
+          </div>
+        ) : null}
         <div ref={threadEnd} />
       </div>
 
@@ -229,7 +263,15 @@ export function Assistant() {
           style={{ flex: 1, borderRadius: 999, padding: '13px 17px' }}
         />
         <button type="submit" className="btn btn-primary" disabled={busy} style={{ borderRadius: '50%', width: 46, height: 46, padding: 0 }}>
-          {busy ? <span className="spinner" /> : '↑'}
+          {busy ? (
+            <span className="glass-loading" style={{ color: '#fff' }}>
+              <span className="dot-beat" />
+              <span className="dot-beat" />
+              <span className="dot-beat" />
+            </span>
+          ) : (
+            '↑'
+          )}
         </button>
       </form>
     </div>

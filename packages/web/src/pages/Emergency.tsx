@@ -179,10 +179,10 @@ export function Emergency() {
   const question = lastTurn?.question;
 
   return (
-    <div className="page fade-up">
-      <h1 className="h1">Emergency triage</h1>
+    <div className="page">
+      <h1 className="h1 fade-up">Emergency triage</h1>
 
-      <div className="glass glass-lift" style={{ borderRadius: 20, overflow: 'hidden' }}>
+      <div className="glass glass-lift fade-up" style={{ borderRadius: 20, overflow: 'hidden', animationDelay: '50ms' }}>
         <div style={{ background: TIER_COLOR[tier], padding: 18, color: '#fff' }}>
           <div className="label" style={{ color: 'rgba(255,255,255,0.82)' }}>
             Risk · clinical engine
@@ -217,7 +217,11 @@ export function Emergency() {
       ) : null}
 
       {awaitingConfirmation && summary?.routing !== undefined ? (
-        <div className="glass card" style={{ border: '2px solid rgba(220,38,38,0.5)' }}>
+        // The attention pulse is deliberately the ONLY continuously-animating
+        // thing on this screen, and only appears on a control that is
+        // genuinely urgent — a confirmed routing decision waiting on the
+        // press-and-hold gate. It never appears just because a case exists.
+        <div className="glass card attn-pulse" style={{ border: '2px solid rgba(220,38,38,0.5)' }}>
           <div className="label" style={{ color: 'var(--danger-deep)' }}>
             Recommended outcome
           </div>
@@ -229,7 +233,7 @@ export function Emergency() {
         </div>
       ) : null}
 
-      <div>
+      <div className="fade-up" style={{ animationDelay: '100ms' }}>
         <h3 className="h3" style={{ marginBottom: 9 }}>
           What are you experiencing?
         </h3>
@@ -251,7 +255,7 @@ export function Emergency() {
         {selected.length > 0 ? `Send ${selected.length} symptom${selected.length > 1 ? 's' : ''}` : 'Select what applies'}
       </button>
 
-      <div>
+      <div className="fade-up" style={{ animationDelay: '140ms' }}>
         <h3 className="h3" style={{ marginBottom: 9 }}>
           Or describe it
         </h3>

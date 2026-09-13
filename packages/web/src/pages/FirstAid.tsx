@@ -18,20 +18,20 @@ export function FirstAid() {
   const active = FIRST_AID_TOPICS[index];
 
   return (
-    <div className="page fade-up">
+    <div className="page">
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(255,255,255,0.58)', border: '1px solid rgba(255,255,255,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(16,42,84,0.1)' }}>
           <GearIcon />
         </div>
       </div>
 
-      <div className="row" style={{ gap: 10 }}>
+      <div className="row fade-up" style={{ gap: 10 }}>
         <h1 className="h1">First aid</h1>
         <span className="offline-badge">OFFLINE READY</span>
       </div>
-      <p className="body-text" style={{ marginTop: -6 }}>Bundled into the app. No connection is needed to open any of these.</p>
+      <p className="body-text fade-up" style={{ marginTop: -6, animationDelay: '40ms' }}>Bundled into the app. No connection is needed to open any of these.</p>
 
-      <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+      <div className="row fade-up" style={{ flexWrap: 'wrap', gap: 8, animationDelay: '90ms' }}>
         {FIRST_AID_TOPICS.map((topic, i) => (
           <button key={topic.id} onClick={() => setIndex(i)} className={`pill${i === index ? ' selected' : ''}`}>
             {topic.title}
@@ -39,7 +39,7 @@ export function FirstAid() {
         ))}
       </div>
 
-      <a href={`tel:${EMERGENCY_NUMBER}`} className="call-banner">
+      <a href={`tel:${EMERGENCY_NUMBER}`} className="call-banner fade-up" style={{ animationDelay: '150ms' }}>
         <div className="call-phone-circle">
           <PhoneIcon />
         </div>
@@ -53,7 +53,7 @@ export function FirstAid() {
         </p>
       </a>
 
-      <div className="stack">
+      <div className="stack fade-up" style={{ animationDelay: '210ms' }}>
         <div className="stack-back" style={{ top: 16, left: '7%', width: '86%', height: 308, background: 'rgba(228,241,255,0.46)', zIndex: 0 }} />
         <div className="stack-back" style={{ top: 8, left: '4%', width: '92%', height: 320, background: 'rgba(222,237,255,0.58)', zIndex: 1 }} />
         {active !== undefined ? (

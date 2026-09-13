@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useVitals } from '../data/vitalsStore';
 import { HeartbeatIcon } from './icons';
+import { CountUp } from './CountUp';
 
 /** Ported from packages/mobile/src/components/VitalsPanel.tsx — same
  * heading/"Log a reading" pattern, same empty-state "+ Add a reading" pill,
@@ -78,10 +79,12 @@ export function VitalsPanel() {
         ) : (
           <>
             <div className="grid-2" style={{ gap: 10 }}>
-              {vitals.bpSys !== undefined ? <Tile label="BLOOD PRESSURE" value={`${vitals.bpSys}${vitals.bpDia === undefined ? '' : `/${vitals.bpDia}`}`} unit="mmHg" /> : null}
-              {vitals.heartRate !== undefined ? <Tile label="HEART RATE" value={String(vitals.heartRate)} unit="bpm" /> : null}
-              {vitals.spo2 !== undefined ? <Tile label="SPO₂" value={String(vitals.spo2)} unit="%" /> : null}
-              {vitals.glucose !== undefined ? <Tile label="BLOOD GLUCOSE" value={String(vitals.glucose)} unit="mg/dL" /> : null}
+              {vitals.bpSys !== undefined ? (
+                <Tile index={0} label="BLOOD PRESSURE" value={vitals.bpSys} secondary={vitals.bpDia} unit="mmHg" />
+              ) : null}
+              {vitals.heartRate !== undefined ? <Tile index={1} label="HEART RATE" value={vitals.heartRate} unit="bpm" /> : null}
+              {vitals.spo2 !== undefined ? <Tile index={2} label="SPO₂" value={vitals.spo2} unit="%" /> : null}
+              {vitals.glucose !== undefined ? <Tile index={3} label="BLOOD GLUCOSE" value={vitals.glucose} unit="mg/dL" /> : null}
             </div>
             <div style={{ marginTop: 10 }}>
               <AddPill onClick={startEdit} label="Add a reading" />
@@ -108,14 +111,30 @@ function Field({ label, value, onChange }: { readonly label: string; readonly va
   );
 }
 
-function Tile({ label, value, unit }: { readonly label: string; readonly value: string; readonly unit: string }) {
+/**
+ * `index` staggers the label's fade-in slightly ahead of the number
+ * (per the brief: "supporting labels should appear slightly earlier"),
+ * and the value itself counts up from 0 to the real stored reading once,
+ * on mount — see CountUp.tsx. Re-keyed by the panel above whenever the
+ * underlying reading changes, so a genuinely new reading re-triggers the
+ * reveal; re-rendering for an unrelated reason (e.g. editing a different
+ * field) does not.
+ */
+function Tile({ index, label, value, secondary, unit }: { readonly index: number; readonly label: string; readonly value: number; readonly secondary?: number; readonly unit: string }) {
+  const labelDelay = index * 60;
+  const valueDelay = labelDelay + 80;
   return (
-    <div style={{ padding: 12, borderRadius: 14, border: '1px solid rgba(23,105,232,0.12)', background: 'rgba(219,234,254,0.35)' }}>
-      <div className="label" style={{ marginBottom: 6 }}>
+    <div className="fade-up" style={{ padding: 12, borderRadius: 14, border: '1px solid rgba(23,105,232,0.12)', background: 'rgba(219,234,254,0.35)', animationDelay: `${labelDelay}ms` }}>
+      <div className="label fade-up" style={{ marginBottom: 6, animationDelay: `${labelDelay}ms` }}>
         {label}
       </div>
-      <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 22, color: 'var(--ink)' }}>
-        {value}
+      <div className="fade-up" style={{ animationDelay: `${valueDelay}ms`, fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 22, color: 'var(--ink)' }}>
+        <CountUp value={value} />
+        {secondary !== undefined ? (
+          <>
+            /<CountUp value={secondary} />
+          </>
+        ) : null}
         <span style={{ fontFamily: 'var(--font-sans)', fontWeight: 400, fontSize: 13, color: 'var(--muted)' }}>{` ${unit}`}</span>
       </div>
     </div>

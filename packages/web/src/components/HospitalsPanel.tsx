@@ -38,10 +38,26 @@ export function HospitalsPanel() {
     );
   }, []);
 
-  if (status.kind === 'idle' || status.kind === 'loading') return null;
+  if (status.kind === 'idle') return null;
+
+  if (status.kind === 'loading') {
+    return (
+      <div className="glass card fade-up">
+        <div className="label">Nearby hospitals</div>
+        <div className="row" style={{ marginTop: 8, gap: 8 }}>
+          <span className="glass-loading" style={{ color: 'var(--primary)' }}>
+            <span className="dot-beat" />
+            <span className="dot-beat" />
+            <span className="dot-beat" />
+          </span>
+          <span className="small">Finding your location…</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="glass card">
+    <div className="glass card fade-up">
       <div className="label">Nearby hospitals</div>
       {status.kind === 'unavailable' ? (
         <p className="small" style={{ marginTop: 8 }}>
