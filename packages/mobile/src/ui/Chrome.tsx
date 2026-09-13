@@ -96,7 +96,12 @@ function BottomNav({
               <View style={styles.navIcon}>
                 <NavIcon id={item.id} tint={tint} />
               </View>
-              <Text style={[styles.navLabel, { color: on ? colors.brand : '#93A9CE' }]}>
+              <Text
+                style={[styles.navLabel, { color: on ? colors.brand : '#93A9CE' }]}
+                numberOfLines={1}
+                adjustsFontSizeToFit
+                minimumFontScale={0.8}
+              >
                 {item.label}
               </Text>
             </Pressable>
@@ -183,25 +188,35 @@ const styles = StyleSheet.create({
   navWrap: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
   navBar: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
     alignItems: 'center',
     backgroundColor: 'rgba(255,255,255,0.86)',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.85)',
     borderRadius: 26,
     paddingVertical: 9,
-    paddingHorizontal: 6,
+    paddingHorizontal: 4,
     ...shadow('lift'),
   },
+  /**
+   * `flex: 1` on every item, not `justifyContent: 'space-around'` on the row.
+   *
+   * Yoga's default `flexShrink` is 0 — unlike web flexbox — so four fixed-width
+   * pills whose combined intrinsic width (icon + label + padding) exceeds the
+   * available row width do not shrink to fit; they overflow past the row's
+   * right edge and whatever sits there clips them, which is what cut "Home"
+   * down to "Hom" and "Assistant" down to "Assistan" on a narrower phone.
+   * Four equal flex:1 columns can never sum to more than the row's width.
+   */
   navItem: {
+    flex: 1,
     alignItems: 'center',
     gap: 4,
     paddingVertical: 5,
-    paddingHorizontal: 12,
+    paddingHorizontal: 2,
     borderRadius: radius.md,
   },
   navItemOn: { backgroundColor: 'rgba(29,78,216,0.12)' },
   navIcon: { width: 22, height: 16, alignItems: 'center', justifyContent: 'center' },
-  navLabel: { fontFamily: fonts.sansSemi, fontSize: 9.5 },
+  navLabel: { fontFamily: fonts.sansSemi, fontSize: 9.5, textAlign: 'center' },
   wordmark: { fontFamily: fonts.serif, color: colors.ink, letterSpacing: 0.2 },
 });

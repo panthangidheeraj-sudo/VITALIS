@@ -6,19 +6,20 @@
  * is the tab the app opens on rather than the emergency flow: opening straight
  * into a red screen would make the app feel like an alarm you carry around.
  *
- * THE VITALS ARE SAMPLE DATA AND SAY SO. There is no wearable integration and
- * no `patients/{uid}` document being read yet. The design puts a `SAMPLE DATA`
- * chip beside the heading for exactly this reason and it is kept verbatim —
- * a plausible blood-pressure reading with no provenance is the single most
- * misleading thing this screen could show.
+ * VITALS ARE MANUALLY ENTERED, NOT READ FROM A DEVICE. There is no wearable
+ * integration in this build and none was ever planned for it — see
+ * `data/vitalsStore.ts` and `components/VitalsPanel.tsx` for the full
+ * reasoning. Nothing on this screen implies a Bluetooth or continuous-monitor
+ * source; every number here is something a person typed in from their own
+ * home BP cuff, glucometer or oximeter.
  */
 
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { Circle, Path } from 'react-native-svg';
 import { api } from '../api/client';
 import { DEMO_DEMOGRAPHICS, DEMO_EMERGENCY_CARD } from '../data/demoProfile';
 import { useAuth } from '../firebase/useAuth';
+import { VitalsPanel } from '../components/VitalsPanel';
 import { Wordmark } from '../ui/Chrome';
 import { Card, Label, NoticeCard, PrimaryButton } from '../ui/primitives';
 import { colors, fonts, glass, radius, spacing, type } from '../theme';
@@ -32,9 +33,6 @@ interface Props {
   readonly onOpenMedicine: () => void;
   readonly onOpenSilent: () => void;
 }
-
-/** The design's own numbers, kept so the screen matches it beat for beat. */
-const VITALS = { bpSys: 128, bpDia: 84, hr: 78, spo2: 97, glucose: 112 } as const;
 
 const REMINDERS = [
   { name: 'Metformin 500 mg', at: '8:00 AM', state: 'TAKEN' as const },
@@ -125,87 +123,7 @@ export function HomeScreen({
           screen is the whole point of the product. */}
       <PrimaryButton label="Start emergency triage" onPress={onStartEmergency} />
 
-      <View>
-        <View style={styles.sectionHead}>
-          <Text style={type.h3}>{`Today's vitals`}</Text>
-          <Text style={styles.sampleChip}>SAMPLE DATA</Text>
-        </View>
-        <View style={styles.grid}>
-          <View style={[glass('blue'), styles.vital]}>
-            <Label style={{ marginBottom: 10 }}>BLOOD PRESSURE</Label>
-            <Text style={type.metric}>
-              {VITALS.bpSys}
-              <Text style={styles.metricSub}>/{VITALS.bpDia}</Text>
-            </Text>
-            <Text style={styles.unit}>mmHg</Text>
-            <View style={styles.bars}>
-              {[40, 62, 48, 78, 55, 88].map((h, i) => (
-                <View
-                  key={i}
-                  style={[
-                    styles.barCol,
-                    {
-                      height: `${h}%`,
-                      backgroundColor: i === 5 ? colors.brand : 'rgba(29,78,216,0.22)',
-                    },
-                  ]}
-                />
-              ))}
-            </View>
-          </View>
-
-          <View style={[glass('blue'), styles.vital]}>
-            <Label style={{ marginBottom: 10 }}>HEART RATE</Label>
-            <Text style={type.metric}>{VITALS.hr}</Text>
-            <Text style={styles.unit}>bpm</Text>
-            <View style={styles.trace}>
-              <Svg width="100%" height={22} viewBox="0 0 120 22" preserveAspectRatio="none">
-                <Path
-                  d="M0 14 L14 14 L20 5 L26 19 L32 14 L58 14 L64 6 L70 18 L76 14 L104 14 L110 8 L116 14 L120 14"
-                  fill="none"
-                  stroke={colors.brand}
-                  strokeWidth={1.8}
-                  strokeLinejoin="round"
-                />
-              </Svg>
-            </View>
-          </View>
-
-          <View style={[glass('blue'), styles.vital, styles.spo2Row]}>
-            <View style={{ flex: 1 }}>
-              <Label style={{ marginBottom: 9 }}>SPO₂</Label>
-              <Text style={type.metric}>
-                {VITALS.spo2}
-                <Text style={styles.metricSub}>%</Text>
-              </Text>
-            </View>
-            <Svg width={42} height={42} viewBox="0 0 36 36">
-              <Circle cx={18} cy={18} r={15} fill="none" stroke="rgba(29,78,216,0.14)" strokeWidth={3} />
-              <Circle
-                cx={18}
-                cy={18}
-                r={15}
-                fill="none"
-                stroke={colors.brand}
-                strokeWidth={3}
-                strokeLinecap="round"
-                strokeDasharray={94.2}
-                strokeDashoffset={94.2 * (1 - VITALS.spo2 / 100)}
-                transform="rotate(-90 18 18)"
-              />
-            </Svg>
-          </View>
-
-          <View style={[glass('blue'), styles.vital]}>
-            <Label style={{ marginBottom: 10 }}>BLOOD GLUCOSE</Label>
-            <Text style={type.metric}>{VITALS.glucose}</Text>
-            <Text style={styles.unit}>mg/dL · fasting</Text>
-            <View style={styles.glucoseTrack}>
-              <View style={styles.glucoseFill} />
-            </View>
-          </View>
-        </View>
-      </View>
+      <VitalsPanel />
 
       <View>
         <Text style={[type.h3, { marginBottom: 9 }]}>Medication reminders</Text>
@@ -238,7 +156,11 @@ export function HomeScreen({
         <QuickAction title="Emergency card" sub="Blood group, allergies, contacts" onPress={onOpenEmergencyCard} />
         <QuickAction title="Lock-screen QR" sub="Scannable by a responder" onPress={onOpenQr} />
         <QuickAction title="Medicine scanner" sub="Expiry, dose, what it is" onPress={onOpenMedicine} />
-        <QuickAction title="Silent distress" sub="Get help without a sound" onPress={onOpenSilent} />
+        <QuickAction
+          title="Silent distress"
+          sub="Disguises as a calculator and shares your location — for when you can't be seen calling for help"
+          onPress={onOpenSilent}
+        />
         <QuickAction title="First aid" sub="Works with no signal" onPress={onOpenFirstAid} />
         <QuickAction title="Language" sub="English · हिन्दी · తెలుగు · தமிழ்" onPress={onOpenLanguage} />
       </View>
@@ -343,24 +265,7 @@ const styles = StyleSheet.create({
   connLabel: { fontFamily: fonts.sansSemi, fontSize: 11.5, color: colors.ok },
   connMeta: { ...type.small, marginLeft: 'auto', fontSize: 11 },
 
-  sectionHead: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    marginBottom: 9,
-  },
-  sampleChip: { fontFamily: fonts.mono, fontSize: 10, color: colors.faint, letterSpacing: 0.6 },
-
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  vital: { width: '48%', flexGrow: 1, padding: 14, borderRadius: radius.lg },
-  spo2Row: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
-  metricSub: { fontFamily: fonts.sans, fontSize: 15, color: colors.slate },
-  unit: { ...type.foot, marginTop: 4 },
-  bars: { marginTop: 11, height: 22, flexDirection: 'row', alignItems: 'flex-end', gap: 3 },
-  barCol: { flex: 1, borderRadius: 2 },
-  trace: { marginTop: 11, height: 22, overflow: 'hidden' },
-  glucoseTrack: { marginTop: 11, height: 22, justifyContent: 'center' },
-  glucoseFill: { height: 5, borderRadius: radius.pill, backgroundColor: colors.brand, opacity: 0.85 },
 
   reminderCard: { paddingHorizontal: spacing.xl, paddingVertical: 5, borderRadius: radius.lg },
   reminderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: 14 },

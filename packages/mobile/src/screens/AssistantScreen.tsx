@@ -80,6 +80,30 @@ function needsTriage(text: string): boolean {
   return ESCALATE_TERMS.some((term) => lower.includes(term));
 }
 
+/**
+ * Small talk gets a small-talk answer, not the "I cannot answer general
+ * health questions yet" deflection.
+ *
+ * That deflection exists so the assistant never fabricates a medical answer —
+ * it has no reason to fire on "hi". A plain greeting matched against zero
+ * clinical content the deflection was built to guard, so answering it plainly
+ * carries none of the fabrication risk the rest of this file is written
+ * around.
+ */
+const GREETING_PATTERN = /^\s*(hi|hello|hey|yo|hii+|hiya|good\s?(morning|afternoon|evening)|thanks?|thank\s?you|ty|bye|goodbye|ok|okay)\s*[!.]*\s*$/i;
+
+function greetingReply(text: string): string | undefined {
+  if (!GREETING_PATTERN.test(text)) return undefined;
+  const lower = text.toLowerCase();
+  if (/thank/.test(lower) || lower === 'ty') {
+    return "You're welcome. I'm here if anything comes up — and if it's urgent, say so and I'll move you straight to triage.";
+  }
+  if (/bye|goodbye/.test(lower)) {
+    return 'Take care. Your emergency card and first aid guides stay available offline any time.';
+  }
+  return 'Hi — ask me about a reading, a medication, or how you are feeling. If it sounds urgent I will move you to the triage interview instead.';
+}
+
 const OPENING: Message = {
   id: 'opening',
   who: 'agent',
@@ -90,6 +114,7 @@ export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () 
   const [messages, setMessages] = useState<readonly Message[]>([OPENING]);
   const [draft, setDraft] = useState('');
   const [handoffPending, setHandoffPending] = useState(false);
+  const [photoPrompted, setPhotoPrompted] = useState(false);
   const scroller = useRef<ScrollView>(null);
 
   const send = useCallback(() => {
@@ -99,6 +124,7 @@ export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () 
 
     const user: Message = { id: `u${Date.now()}`, who: 'user', text };
     const escalate = needsTriage(text);
+    const greeting = escalate ? undefined : greetingReply(text);
 
     const reply: Message = escalate
       ? {
@@ -108,17 +134,45 @@ export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () 
           text: 'I am going to stop the general conversation there. What you have described needs the triage interview, not a chat answer. It takes about a minute and I ask one thing at a time.',
           meta: 'You can cancel at any point · nothing is dispatched without you',
         }
-      : {
-          id: `a${Date.now()}`,
-          who: 'agent',
-          text: 'I cannot answer general health questions yet — the assistant is not wired to a knowledge endpoint in this build, and I would rather say so than make something up. If this is about symptoms you are having right now, start the triage interview and I can actually help.',
-          meta: 'General chat: not available · triage: available',
-        };
+      : greeting !== undefined
+        ? { id: `a${Date.now()}`, who: 'agent', text: greeting }
+        : {
+            id: `a${Date.now()}`,
+            who: 'agent',
+            text: 'I cannot answer general health questions yet — the assistant is not wired to a knowledge endpoint in this build, and I would rather say so than make something up. If this is about symptoms you are having right now, start the triage interview and I can actually help.',
+            meta: 'General chat: not available · triage: available',
+          };
 
     setMessages((prev) => [...prev, user, reply]);
     setHandoffPending(escalate);
+    setPhotoPrompted(false);
     requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
   }, [draft]);
+
+  /**
+   * The photo-attach affordance the chat itself was missing.
+   *
+   * A photo is always ONE MORE OBSERVATION ON A CASE (§5.7) — it has nowhere
+   * to attach to until a case exists, so this cannot capture a photo here
+   * without inventing a second, case-less photo path the rest of the system
+   * does not recognise. What it CAN do, and did not, is tell the user in the
+   * one place they were looking (the chat) that the photo lives one tap away
+   * inside triage, instead of leaving them to discover it by chance.
+   */
+  const promptPhoto = useCallback(() => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `a${Date.now()}`,
+        who: 'agent',
+        handoff: true,
+        text: 'A photo becomes part of your case record, so it is attached from inside the triage interview rather than here. Start triage and the photo step is right there — it is optional, and your risk tier never depends on it.',
+        meta: 'Tap below to go straight there',
+      },
+    ]);
+    setPhotoPrompted(true);
+    requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
+  }, []);
 
   const started = messages.length > 1;
 
@@ -170,11 +224,11 @@ export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () 
         ))}
 
         {/* The handoff is a button, not a link inside a sentence. Once the
-            assistant has said it is stopping, continuing to type must be the
-            harder path. */}
-        {handoffPending ? (
+            assistant has said it is stopping, continuing to type — or tapping
+            past the photo prompt — must be the harder path. */}
+        {handoffPending || photoPrompted ? (
           <PrimaryButton
-            label="Start emergency triage"
+            label={photoPrompted && !handoffPending ? 'Start triage & add a photo' : 'Start emergency triage'}
             onPress={onStartTriage}
             style={{ marginTop: spacing.lg }}
           />
@@ -182,6 +236,16 @@ export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () 
       </ScrollView>
 
       <View style={styles.composer}>
+        {/* The photo-attach entry point the chat itself was missing. It does
+            not capture anything here — see promptPhoto's comment for why —
+            it tells the user where the photo step actually lives. */}
+        <Pressable
+          onPress={promptPhoto}
+          hitSlop={8}
+          style={({ pressed }) => [styles.attachButton, pressed ? { opacity: 0.6 } : null]}
+        >
+          <Text style={styles.attachGlyph}>📷</Text>
+        </Pressable>
         <View style={styles.inputWrap}>
           <TextInput
             value={draft}
@@ -311,4 +375,15 @@ const styles = StyleSheet.create({
     ...shadow('lift'),
   },
   sendGlyph: { fontFamily: fonts.sansBold, fontSize: 18, color: colors.white },
+  attachButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.7)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.9)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attachGlyph: { fontSize: 17 },
 });

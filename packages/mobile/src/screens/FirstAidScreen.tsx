@@ -33,13 +33,14 @@ import { BackLink, Label } from '../ui/primitives';
 import { colors, dangerWash, fonts, radius, shadow, spacing, type } from '../theme';
 
 /**
- * India's single emergency number.
+ * The ambulance number shown on every first-aid card.
  *
- * 112 replaced the separate 100/101/102 numbers nationally and routes to all
- * services, so it is the one number that is right regardless of what is
- * actually wrong — which matters when the person dialling may not know.
+ * 108 is the toll-free government ambulance service most Indian states run,
+ * and it is the number a lay rescuer needs for exactly what this screen
+ * covers — CPR, choking, bleeding, burns. Kept as one constant, imported
+ * everywhere it is spoken, so a future change to the number happens once.
  */
-const EMERGENCY_NUMBER = '112';
+const EMERGENCY_NUMBER = '108';
 
 export function FirstAidScreen({ onBack }: { readonly onBack: () => void }) {
   const [topics, setTopics] = useState<readonly FirstAidTopic[]>(FIRST_AID_TOPICS);
@@ -104,8 +105,19 @@ export function FirstAidScreen({ onBack }: { readonly onBack: () => void }) {
         </LinearGradient>
       </Pressable>
 
-      {/* The card stack. Cards behind the active one are pushed back in Z,
-          scaled down and rotated — the same values the design uses. */}
+      {/*
+        The card stack. Cards behind the active one are pushed back, scaled
+        down and offset sideways.
+
+        ORIGINALLY used `perspective` + `rotateY` to match the design's 3D
+        tilt. Dropped: combining a 3D transform with the badge circles' own
+        border + shadow on Android's rendering path produced a smeared blue
+        blob where the stack should be — a known class of compositing bug when
+        `rotateY`/`perspective` sits on a View with shadowed/bordered
+        children, not something a style tweak fixes. `translateX` + `scale`
+        alone is 2D-only, GPU-composited without the 3D path, and still reads
+        clearly as a stack.
+      */}
       <View style={styles.stack}>
         {topics.map((topic, i) => {
           const offset = i - index;
@@ -120,11 +132,9 @@ export function FirstAidScreen({ onBack }: { readonly onBack: () => void }) {
                   zIndex: 10 - distance,
                   opacity: distance > 2 ? 0 : 1,
                   transform: [
-                    { perspective: 900 },
-                    { translateX: offset * 26 },
+                    { translateX: offset * 30 },
                     { translateY: distance * 10 },
                     { scale: 1 - distance * 0.08 },
-                    { rotateY: `${offset * -8}deg` },
                   ],
                 },
               ]}

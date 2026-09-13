@@ -31,8 +31,8 @@ export const FIRST_AID_DISCLAIMER =
   'General guidance only, for use while waiting for help. Not a substitute for ' +
   'emergency services or a clinician. If you are unsure, call for help first.';
 
-/** India-wide emergency number (§ India-context positioning). */
-export const EMERGENCY_NUMBER = '112';
+/** Ambulance/medical emergency number used for this build's India context. */
+export const EMERGENCY_NUMBER = '108';
 
 export const FIRST_AID_TOPICS: readonly FirstAidTopic[] = [
   {

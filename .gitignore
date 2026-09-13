@@ -40,3 +40,4 @@ coverage/
 # Vite
 packages/web/dist/
 packages/web/dev-dist/
+.expo/

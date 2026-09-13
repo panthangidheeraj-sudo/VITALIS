@@ -16,7 +16,13 @@
  *    hiding what the system is doing is correct - everywhere else the opposite
  *    rule applies.
  *  - EXIT IS DELIBERATE AND UNLABELLED. A long-press on the display leaves the
- *    mode; nothing says so.
+ *    mode; nothing says so. A second path exists for the same reason real
+ *    disguised-app conventions ship one: a long-press can be swallowed by the
+ *    OS (accessibility services, a screen reader, a slow device) with no
+ *    feedback that it failed, and a mode with only one silent exit and no way
+ *    to tell if it worked is a trap, not a safeguard. Five taps on "C" within
+ *    three seconds — the button already used to clear the display, so it
+ *    draws no attention — also exits.
  *  - THE CALCULATOR ACTUALLY WORKS. A fake one that does nothing when tapped
  *    is more suspicious than no disguise at all.
  *
@@ -50,12 +56,22 @@ const KEYS = [
   ['0', '.', '='],
 ] as const;
 
+/** Taps on "C" within this window count toward the alternate exit. */
+const CLEAR_TAP_WINDOW_MS = 3000;
+const CLEAR_TAPS_TO_EXIT = 5;
+
 export function SilentDistressScreen({ onSharePing, onExit, pingIntervalMs = 60_000 }: Props) {
   const [display, setDisplay] = useState('0');
   const [pending, setPending] = useState<{ value: number; op: string } | undefined>(undefined);
   const [fresh, setFresh] = useState(true);
   const pingRef = useRef(onSharePing);
   pingRef.current = onSharePing;
+  const exitRef = useRef(onExit);
+  exitRef.current = onExit;
+  // Not component state: a tap counter re-rendering the screen would be a
+  // flicker an onlooker could notice, which is the one thing this screen must
+  // never do.
+  const clearTaps = useRef<number[]>([]);
 
   useEffect(() => {
     // First ping is immediate: the whole point is that help knows where they
@@ -71,6 +87,15 @@ export function SilentDistressScreen({ onSharePing, onExit, pingIntervalMs = 60_
         setDisplay('0');
         setPending(undefined);
         setFresh(true);
+
+        const now = Date.now();
+        const recent = clearTaps.current.filter((t) => now - t < CLEAR_TAP_WINDOW_MS);
+        recent.push(now);
+        clearTaps.current = recent;
+        if (recent.length >= CLEAR_TAPS_TO_EXIT) {
+          clearTaps.current = [];
+          exitRef.current();
+        }
         return;
       }
       if (/[0-9.]/.test(key)) {
