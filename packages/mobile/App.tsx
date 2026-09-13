@@ -1,90 +1,121 @@
 /**
- * Root component and screen routing.
+ * Root component, font loading and screen routing.
  *
- * NAVIGATION CHOICE - a deliberate deviation from the plan, which said
- * expo-router. The flow is four screens with a strictly linear emergency path
- * (Home -> Emergency -> Tracking), and the Android hardware back button is
- * something this app wants to CONTROL rather than delegate: silently popping
- * out of an active dispatch would be wrong. A plain discriminated union of
- * screen states gives exactly that control, adds no dependency, and removes a
- * whole class of setup risk from a monorepo Metro configuration that was
- * already the main unknown. If deep linking or a tab bar is ever needed,
- * swapping in expo-router touches only this file.
+ * NAVIGATION CHOICE — still a plain discriminated union rather than
+ * expo-router. The emergency path is strictly linear and the Android hardware
+ * back button is something this app wants to CONTROL rather than delegate:
+ * silently popping out of an active dispatch would be wrong. A union of screen
+ * states gives exactly that, adds no dependency, and keeps a tricky monorepo
+ * Metro setup simple. The design's twelve screens fit it unchanged.
+ *
+ * ---------------------------------------------------------------------------
+ * FONTS BLOCK NOTHING.
+ *
+ * `useFonts` resolves asynchronously and the app renders either way. The design
+ * depends heavily on Plus Jakarta Sans, IBM Plex Mono and Instrument Serif, but
+ * a splash screen held until three webfonts download is indefensible in an app
+ * whose first screen may be opened during an emergency. Until they land the
+ * system face is used; when they land the tree re-renders. The only visible
+ * effect is a brief reflow.
+ * ---------------------------------------------------------------------------
  */
 
 import { useEffect, useState } from 'react';
 import { SafeAreaView, StatusBar, StyleSheet } from 'react-native';
+import { useFonts } from 'expo-font';
+import {
+  PlusJakartaSans_400Regular,
+  PlusJakartaSans_500Medium,
+  PlusJakartaSans_600SemiBold,
+  PlusJakartaSans_700Bold,
+  PlusJakartaSans_800ExtraBold,
+} from '@expo-google-fonts/plus-jakarta-sans';
+import {
+  IBMPlexMono_400Regular,
+  IBMPlexMono_500Medium,
+  IBMPlexMono_600SemiBold,
+  IBMPlexMono_700Bold,
+} from '@expo-google-fonts/ibm-plex-mono';
+import { InstrumentSerif_400Regular } from '@expo-google-fonts/instrument-serif';
 import type { CaseId, Language } from '@triage/shared';
+
+import { AssistantScreen } from './src/screens/AssistantScreen';
+import { CancelledScreen } from './src/screens/CancelledScreen';
 import { CompanionScreen } from './src/screens/CompanionScreen';
 import { EmergencyCardScreen } from './src/screens/EmergencyCardScreen';
-import { EmergencyScreen } from './src/screens/EmergencyScreen';
-import { HandoffScreen } from './src/screens/HandoffScreen';
-import { LanguageScreen } from './src/screens/LanguageScreen';
-import { PhotoInjuryScreen } from './src/screens/PhotoInjuryScreen';
 import { EmergencyQrScreen } from './src/screens/EmergencyQrScreen';
-import { MedicineScannerScreen } from './src/screens/MedicineScannerScreen';
-import { SilentDistressScreen } from './src/screens/SilentDistressScreen';
-import { CountdownAlarm } from './src/components/CountdownAlarm';
-import { startFallDetection } from './src/sensors/fallSensor';
+import { EmergencyScreen } from './src/screens/EmergencyScreen';
+import { EscalatedScreen } from './src/screens/EscalatedScreen';
 import { FirstAidScreen } from './src/screens/FirstAidScreen';
+import { HandoffScreen } from './src/screens/HandoffScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { LanguageScreen } from './src/screens/LanguageScreen';
+import { MedicineScannerScreen } from './src/screens/MedicineScannerScreen';
+import { PhotoInjuryScreen } from './src/screens/PhotoInjuryScreen';
+import { SilentDistressScreen } from './src/screens/SilentDistressScreen';
 import { TrackingScreen } from './src/screens/TrackingScreen';
-import { ensureSignedIn, isFirebaseConfigured } from './src/firebase/client';
-import { hydrateFirstAidCache } from './src/offline/firstAidStore';
-import { colors } from './src/theme';
 
-type Screen =
+import { CountdownAlarm } from './src/components/CountdownAlarm';
+import { Screen, type Tab } from './src/ui/Chrome';
+import { startFallDetection } from './src/sensors/fallSensor';
+import { hydrateFirstAidCache } from './src/offline/firstAidStore';
+import { ensureSignedIn, isFirebaseConfigured } from './src/firebase/client';
+import { api } from './src/api/client';
+
+type ScreenState =
   | { readonly name: 'home' }
+  | { readonly name: 'assistant' }
   | { readonly name: 'emergency' }
   | { readonly name: 'tracking'; readonly caseId: CaseId }
   | { readonly name: 'firstAid' }
-  // The five rough screens. Companion and Handoff both need a live case, so
-  // they carry the caseId in the state rather than reading a global - the
-  // union makes it impossible to route to them without one.
   | { readonly name: 'emergencyCard' }
   | { readonly name: 'language' }
   | { readonly name: 'companion'; readonly caseId: CaseId }
   | { readonly name: 'handoff'; readonly caseId: CaseId }
-  | { readonly name: 'photo' }
+  | { readonly name: 'photo'; readonly caseId?: CaseId }
+  | { readonly name: 'escalated'; readonly caseId: CaseId }
+  | { readonly name: 'cancelled' }
   | { readonly name: 'qr' }
   | { readonly name: 'medicine' }
   | { readonly name: 'silent' };
 
 /**
- * Seconds to cancel an AUTOMATIC alert before contacts are notified.
+ * Seconds to cancel an AUTOMATIC alert before it escalates.
  *
  * Long enough to fish the phone out of a pocket and read the screen; short
  * enough that a real fall is not left waiting. Nothing here dispatches an
- * ambulance - that still requires the 3-second press-and-hold gate.
+ * ambulance — that still requires the 3-second press-and-hold gate.
  */
 const AUTO_ALERT_COUNTDOWN_SECONDS = 30;
 
 export default function App() {
-  const [screen, setScreen] = useState<Screen>({ name: 'home' });
-  // Language is app-level, not per-screen: changing it must not restart a case.
+  const [screen, setScreen] = useState<ScreenState>({ name: 'home' });
+  // App-level, not per-screen: changing it must never restart a case.
   const [language, setLanguage] = useState<Language>('en');
-  /**
-   * An automatic trigger (a detected fall today, Guardian Mode next) shows the
-   * countdown OVER whatever screen is open, rather than navigating. Navigating
-   * would lose whatever the user was doing, and the alert may well be wrong.
-   */
   const [autoAlert, setAutoAlert] = useState<{ title: string; reason: string } | undefined>(
     undefined,
   );
 
-  useEffect(() => {
-    // Cache first-aid content before it is ever needed - the one thing that
-    // must work when nothing else does.
-    void hydrateFirstAidCache();
+  const [fontsLoaded] = useFonts({
+    PlusJakartaSans_400Regular,
+    PlusJakartaSans_500Medium,
+    PlusJakartaSans_600SemiBold,
+    PlusJakartaSans_700Bold,
+    PlusJakartaSans_800ExtraBold,
+    IBMPlexMono_400Regular,
+    IBMPlexMono_500Medium,
+    IBMPlexMono_600SemiBold,
+    IBMPlexMono_700Bold,
+    InstrumentSerif_400Regular,
+  });
+  // Referenced so the dependency is explicit rather than incidental; the value
+  // itself is deliberately not gating render. See the file header.
+  void fontsLoaded;
 
-    // Anonymous sign-in populates request.auth for the Firestore rules. It
-    // resolves false rather than throwing when it fails, so a misconfigured
-    // Firebase project degrades the live-update feature instead of blocking
-    // the whole app at launch.
+  useEffect(() => {
+    void hydrateFirstAidCache();
     if (isFirebaseConfigured()) void ensureSignedIn();
 
-    // Fall detection runs for the life of the app. It never dispatches - it
-    // can only raise the cancellable countdown below.
     let stop: (() => void) | undefined;
     void startFallDetection((event) => {
       setAutoAlert({
@@ -97,89 +128,168 @@ export default function App() {
     return () => stop?.();
   }, []);
 
-  return (
-    <SafeAreaView style={styles.root}>
-      <StatusBar barStyle="dark-content" backgroundColor={colors.bg} />
-      {screen.name === 'home' ? (
-        <HomeScreen
-          onStartEmergency={() => setScreen({ name: 'emergency' })}
-          onOpenFirstAid={() => setScreen({ name: 'firstAid' })}
-          onOpenEmergencyCard={() => setScreen({ name: 'emergencyCard' })}
-          onOpenLanguage={() => setScreen({ name: 'language' })}
-          onOpenQr={() => setScreen({ name: 'qr' })}
-          onOpenMedicine={() => setScreen({ name: 'medicine' })}
-          onOpenSilent={() => setScreen({ name: 'silent' })}
-        />
-      ) : null}
+  const goTab = (tab: Exclude<Tab, 'none'>) => {
+    if (tab === 'home') setScreen({ name: 'home' });
+    if (tab === 'assistant') setScreen({ name: 'assistant' });
+    if (tab === 'emergency') setScreen({ name: 'emergency' });
+    if (tab === 'firstaid') setScreen({ name: 'firstAid' });
+  };
 
-      {screen.name === 'emergency' ? (
-        <EmergencyScreen
-          onDispatched={(caseId) => setScreen({ name: 'tracking', caseId })}
-          onBack={() => setScreen({ name: 'home' })}
-        />
-      ) : null}
+  /** Which tab lights up. Sub-screens keep their parent tab lit. */
+  const activeTab: Tab =
+    screen.name === 'home'
+      ? 'home'
+      : screen.name === 'assistant'
+        ? 'assistant'
+        : screen.name === 'firstAid'
+          ? 'firstaid'
+          : screen.name === 'emergency' ||
+              screen.name === 'photo' ||
+              screen.name === 'escalated' ||
+              screen.name === 'cancelled'
+            ? 'emergency'
+            : 'none';
 
-      {screen.name === 'tracking' ? (
-        <TrackingScreen
-          caseId={screen.caseId}
-          onCancelled={() => setScreen({ name: 'home' })}
-          onOpenCompanion={() => setScreen({ name: 'companion', caseId: screen.caseId })}
-          onOpenHandoff={() => setScreen({ name: 'handoff', caseId: screen.caseId })}
-        />
-      ) : null}
-
-      {screen.name === 'firstAid' ? (
-        <FirstAidScreen onBack={() => setScreen({ name: 'home' })} />
-      ) : null}
-
-      {screen.name === 'emergencyCard' ? (
-        <EmergencyCardScreen onBack={() => setScreen({ name: 'home' })} />
-      ) : null}
-
-      {screen.name === 'language' ? (
-        <LanguageScreen
-          current={language}
-          onSelect={(next) => {
-            setLanguage(next);
-            setScreen({ name: 'home' });
-          }}
-          onBack={() => setScreen({ name: 'home' })}
-        />
-      ) : null}
-
-      {screen.name === 'companion' ? (
-        <CompanionScreen
-          caseId={screen.caseId}
-          onOpenFirstAid={() => setScreen({ name: 'firstAid' })}
-          onBack={() => setScreen({ name: 'home' })}
-        />
-      ) : null}
-
-      {screen.name === 'handoff' ? (
-        <HandoffScreen caseId={screen.caseId} onBack={() => setScreen({ name: 'home' })} />
-      ) : null}
-
-      {screen.name === 'photo' ? (
-        <PhotoInjuryScreen onBack={() => setScreen({ name: 'emergency' })} />
-      ) : null}
-
-      {screen.name === 'qr' ? (
-        <EmergencyQrScreen onBack={() => setScreen({ name: 'home' })} />
-      ) : null}
-
-      {screen.name === 'medicine' ? (
-        <MedicineScannerScreen onBack={() => setScreen({ name: 'home' })} />
-      ) : null}
-
-      {screen.name === 'silent' ? (
+  /**
+   * Silent Distress renders OUTSIDE the Vitalis shell, deliberately.
+   *
+   * Its entire job is to look like a plain calculator to someone standing next
+   * to the user. Wrapping it in the app's blue gradient and a tab bar labelled
+   * "Emergency" would defeat the feature completely — so it replaces the shell
+   * rather than sitting inside it, and it keeps its own dark status bar.
+   */
+  if (screen.name === 'silent') {
+    return (
+      <SafeAreaView style={styles.disguise}>
+        <StatusBar barStyle="light-content" backgroundColor="#1C1C1E" />
         <SilentDistressScreen
           onSharePing={() => {
-            // Deliberately silent: no toast, no log the user can see. The
-            // adversary in this mode is standing next to them.
+            // Deliberately silent: no toast, no visible log. The adversary in
+            // this mode is standing next to them.
           }}
           onExit={() => setScreen({ name: 'home' })}
         />
-      ) : null}
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.root}>
+      <StatusBar barStyle="dark-content" backgroundColor="#eef3fa" />
+
+      <Screen
+        tab={activeTab}
+        onTab={goTab}
+        // Tracking owns the screen: the pinned Cancel Alert must not compete
+        // with a tab bar while an alert is live.
+        hideNav={screen.name === 'tracking'}
+        scroll={screen.name !== 'assistant'}
+      >
+        {screen.name === 'home' ? (
+          <HomeScreen
+            onStartEmergency={() => setScreen({ name: 'emergency' })}
+            onOpenFirstAid={() => setScreen({ name: 'firstAid' })}
+            onOpenEmergencyCard={() => setScreen({ name: 'emergencyCard' })}
+            onOpenLanguage={() => setScreen({ name: 'language' })}
+            onOpenQr={() => setScreen({ name: 'qr' })}
+            onOpenMedicine={() => setScreen({ name: 'medicine' })}
+            onOpenSilent={() => setScreen({ name: 'silent' })}
+          />
+        ) : null}
+
+        {screen.name === 'assistant' ? (
+          <AssistantScreen onStartTriage={() => setScreen({ name: 'emergency' })} />
+        ) : null}
+
+        {screen.name === 'emergency' ? (
+          <EmergencyScreen
+            onDispatched={(caseId) => setScreen({ name: 'tracking', caseId })}
+            onEscalated={(caseId) => setScreen({ name: 'escalated', caseId })}
+            onPhoto={(caseId) => setScreen({ name: 'photo', caseId })}
+            onBack={() => setScreen({ name: 'home' })}
+          />
+        ) : null}
+
+        {screen.name === 'tracking' ? (
+          <TrackingScreen
+            caseId={screen.caseId}
+            onCancelled={() => setScreen({ name: 'cancelled' })}
+            onOpenCompanion={() => setScreen({ name: 'companion', caseId: screen.caseId })}
+            onOpenHandoff={() => setScreen({ name: 'handoff', caseId: screen.caseId })}
+          />
+        ) : null}
+
+        {screen.name === 'escalated' ? (
+          <EscalatedScreen
+            caseId={screen.caseId}
+            onBack={() => setScreen({ name: 'emergency' })}
+            onRequestAmbulance={() => setScreen({ name: 'emergency' })}
+          />
+        ) : null}
+
+        {screen.name === 'cancelled' ? (
+          <CancelledScreen
+            onReopen={() => setScreen({ name: 'emergency' })}
+            onHome={() => setScreen({ name: 'home' })}
+          />
+        ) : null}
+
+        {screen.name === 'firstAid' ? (
+          <FirstAidScreen onBack={() => setScreen({ name: 'home' })} />
+        ) : null}
+
+        {screen.name === 'emergencyCard' ? (
+          <EmergencyCardScreen onBack={() => setScreen({ name: 'home' })} />
+        ) : null}
+
+        {screen.name === 'language' ? (
+          <LanguageScreen
+            current={language}
+            onSelect={(next) => {
+              setLanguage(next);
+              setScreen({ name: 'home' });
+            }}
+            onBack={() => setScreen({ name: 'home' })}
+          />
+        ) : null}
+
+        {screen.name === 'companion' ? (
+          <CompanionScreen
+            caseId={screen.caseId}
+            onOpenFirstAid={() => setScreen({ name: 'firstAid' })}
+            onBack={() => setScreen({ name: 'tracking', caseId: screen.caseId })}
+          />
+        ) : null}
+
+        {screen.name === 'handoff' ? (
+          <HandoffScreen
+            caseId={screen.caseId}
+            onBack={() => setScreen({ name: 'tracking', caseId: screen.caseId })}
+          />
+        ) : null}
+
+        {screen.name === 'photo' ? (
+          <PhotoInjuryScreen
+            onBack={() => setScreen({ name: 'emergency' })}
+            {...(screen.caseId === undefined
+              ? {}
+              : {
+                  onSubmit: async (photoRef: string) => {
+                    await api.submitPhoto(screen.caseId as CaseId, photoRef);
+                  },
+                })}
+          />
+        ) : null}
+
+        {screen.name === 'qr' ? (
+          <EmergencyQrScreen onBack={() => setScreen({ name: 'home' })} />
+        ) : null}
+
+        {screen.name === 'medicine' ? (
+          <MedicineScannerScreen onBack={() => setScreen({ name: 'home' })} />
+        ) : null}
+
+      </Screen>
 
       {/* Rendered last so it covers whatever is beneath it. */}
       {autoAlert !== undefined ? (
@@ -199,5 +309,7 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+  root: { flex: 1, backgroundColor: '#eef3fa' },
+  /** The calculator's own background. Nothing Vitalis-coloured may show. */
+  disguise: { flex: 1, backgroundColor: '#1C1C1E' },
 });

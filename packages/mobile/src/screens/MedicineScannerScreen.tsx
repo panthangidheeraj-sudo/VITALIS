@@ -22,17 +22,10 @@
  */
 
 import { useCallback, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 import { api, ApiError, type MedicationLookup } from '../api/client';
-import { colors, radius, spacing, type } from '../theme';
+import { colors, fonts, glass, radius, spacing, type } from '../theme';
+import { BackLink, Card, Label, NoticeCard, PrimaryButton } from '../ui/primitives';
 
 type Status =
   | { readonly kind: 'idle' }
@@ -75,93 +68,109 @@ export function MedicineScannerScreen({ onBack }: { readonly onBack: () => void 
   const disabled = name.trim().length === 0 || status.kind === 'looking_up';
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <View style={styles.root}>
+      <BackLink onPress={onBack} />
+
       <Text style={type.h1}>Medicine scanner</Text>
-      <Text style={type.small}>Check what a medicine is and whether it is still in date.</Text>
+      <Text style={[type.small, { marginTop: -6 }]}>
+        Check what a medicine is and whether it is still in date.
+      </Text>
 
       <View style={styles.scanFrame}>
-        <Text style={styles.scanHint}>Camera scanning is unavailable</Text>
-        <Text style={type.tiny}>No vision model is configured. Type the name instead.</Text>
+        <Label color="#5b6b83" style={{ letterSpacing: 0.6 }}>
+          CAMERA SCANNING UNAVAILABLE
+        </Label>
+        <Text style={styles.scanHint}>No camera module is installed. Type the name instead.</Text>
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>NAME ON THE PACK</Text>
+      <Card tone="blue">
+        <Label>NAME ON THE PACK</Label>
         <TextInput
           style={styles.input}
           value={name}
           onChangeText={setName}
           placeholder="e.g. Glucophage, or metformin"
-          placeholderTextColor={colors.textFaint}
+          placeholderTextColor={colors.faint}
           autoCapitalize="none"
         />
-        <Text style={[styles.cardLabel, styles.spaced]}>EXPIRY ON THE PACK</Text>
+        <Label style={{ marginTop: 16 }}>EXPIRY ON THE PACK</Label>
         <TextInput
           style={styles.input}
           value={expiry}
           onChangeText={setExpiry}
           placeholder="YYYY-MM, e.g. 2027-04"
-          placeholderTextColor={colors.textFaint}
+          placeholderTextColor={colors.faint}
         />
-      </View>
+      </Card>
 
-      <Pressable
-        style={[styles.primaryButton, disabled && styles.disabled]}
-        onPress={() => void lookup()}
-        disabled={disabled}
-        accessibilityRole="button"
-      >
-        <Text style={styles.primaryText}>
-          {status.kind === 'looking_up' ? 'Checking...' : 'Check this medicine'}
-        </Text>
-      </Pressable>
+      <PrimaryButton
+        label={status.kind === 'looking_up' ? 'Checking…' : 'Check this medicine'}
+        onPress={disabled ? undefined : () => void lookup()}
+        busy={status.kind === 'looking_up'}
+      />
 
-      {status.kind === 'looking_up' ? <ActivityIndicator color={colors.primary} /> : null}
-
-      {/* Expiry is arithmetic on what the user read, never a model's guess. */}
+      {/* Expiry is arithmetic on what the USER read off the pack, never a
+          model's guess. That is why it is allowed to be this definite. */}
       {months !== undefined ? (
-        <View
-          style={[
-            styles.card,
-            months < 0 ? styles.expired : months <= 2 ? styles.soon : styles.plain,
-          ]}
+        <NoticeCard
+          accent={months < 0 ? colors.danger : months <= 2 ? colors.warn : colors.ok}
+          background={
+            months < 0 ? colors.dangerWash : months <= 2 ? colors.warnWash : 'rgba(21,128,61,0.1)'
+          }
+          border={
+            months < 0
+              ? 'rgba(220,38,38,0.3)'
+              : months <= 2
+                ? 'rgba(217,119,6,0.35)'
+                : 'rgba(21,128,61,0.3)'
+          }
         >
-          <Text style={styles.cardLabel}>EXPIRY</Text>
+          <Label color={months < 0 ? colors.dangerDeep : months <= 2 ? colors.warnDeep : colors.ok}>
+            EXPIRY
+          </Label>
           <Text style={styles.verdict}>{expiryVerdict(months)}</Text>
-          {months < 0 ? <Text style={type.small}>Do not take this. Replace it.</Text> : null}
-        </View>
+          {months < 0 ? (
+            <Text style={[type.small, { color: colors.dangerInk, marginTop: 4 }]}>
+              Do not take this. Replace it.
+            </Text>
+          ) : null}
+        </NoticeCard>
       ) : null}
 
       {med !== undefined ? (
-        <View style={styles.card}>
-          <Text style={styles.cardLabel}>WHAT THIS IS</Text>
-          <Text style={type.h3}>{med.normalizedName ?? med.reportedName}</Text>
+        <Card tone="blue">
+          <Label>WHAT THIS IS</Label>
+          <Text style={[type.h3, { fontSize: 16, marginTop: 9 }]}>
+            {med.normalizedName ?? med.reportedName}
+          </Text>
           {med.normalizedName !== undefined && med.normalizedName !== med.reportedName ? (
-            <Text style={type.small}>You typed: {med.reportedName}</Text>
+            <Text style={[type.small, { marginTop: 3 }]}>{`You typed: ${med.reportedName}`}</Text>
           ) : null}
-          <Text style={type.tiny}>
+          <Text style={[type.foot, { marginTop: 7 }]}>
             {med.rxcui !== undefined
               ? 'Verified against RxNorm, the US national drug vocabulary.'
-              : 'Not found in RxNorm - it may be a local brand name. Kept exactly as you typed it.'}
+              : 'Not found in RxNorm — it may be a local brand name. Kept exactly as you typed it.'}
           </Text>
-        </View>
+        </Card>
       ) : null}
 
-      {/* Shown on every completed lookup, not only on failure: a warning that
+      {/* Shown on EVERY completed lookup, not only on failure: a warning that
           appears sometimes is a warning people learn to ignore. */}
       {status.kind === 'done' ? (
-        <View style={styles.warnCard}>
-          <Text style={styles.warnTitle}>INTERACTIONS ARE NOT CHECKED</Text>
-          <Text style={type.small}>{status.result.interactionNotice}</Text>
-        </View>
+        <NoticeCard accent={colors.warn} background={colors.warnWash} border="rgba(217,119,6,0.35)">
+          <Label color={colors.warnDeep}>INTERACTIONS ARE NOT CHECKED</Label>
+          <Text style={[type.small, { color: colors.warnInk, marginTop: 6 }]}>
+            {status.result.interactionNotice}
+          </Text>
+        </NoticeCard>
       ) : null}
 
-      {status.kind === 'error' ? <Text style={styles.error}>{status.message}</Text> : null}
-
-      <Pressable onPress={onBack} style={styles.linkButton}>
-        <Text style={styles.linkText}>Back</Text>
-      </Pressable>
-      <View style={styles.tail} />
-    </ScrollView>
+      {status.kind === 'error' ? (
+        <NoticeCard accent={colors.danger} background={colors.dangerWash} border="rgba(220,38,38,0.3)">
+          <Text style={[type.small, { color: colors.dangerInk }]}>{status.message}</Text>
+        </NoticeCard>
+      ) : null}
+    </View>
   );
 }
 
@@ -175,67 +184,28 @@ function expiryVerdict(months: number): string {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md },
-  tail: { height: spacing.xxl },
-  spaced: { marginTop: spacing.md },
-
+  root: { gap: spacing.lg },
   scanFrame: {
     height: 150,
-    borderRadius: radius.lg,
-    borderWidth: 2,
+    borderRadius: radius.xl,
+    borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
+    borderColor: 'rgba(29,78,216,0.35)',
+    backgroundColor: colors.surfaceSoft,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
+    gap: 8,
   },
-  scanHint: { ...type.h3 },
-
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.xs,
-  },
-  plain: {},
-  cardLabel: { ...type.tiny, letterSpacing: 0.6 },
+  scanHint: { fontFamily: fonts.sans, fontSize: 11, color: colors.label },
   input: {
-    borderWidth: 1,
-    borderColor: colors.border,
+    ...glass('plain'),
     borderRadius: radius.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.md,
-    fontSize: 16,
-    color: colors.text,
-    backgroundColor: colors.bg,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    marginTop: 9,
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    color: colors.ink,
   },
-
-  primaryButton: {
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    paddingVertical: spacing.lg,
-    alignItems: 'center',
-  },
-  primaryText: { color: '#FFFFFF', fontSize: 16, fontWeight: '700' },
-  disabled: { opacity: 0.5 },
-
-  expired: { backgroundColor: colors.dangerSoft, borderColor: colors.danger },
-  soon: { backgroundColor: colors.warningSoft, borderColor: colors.warning },
-  verdict: { fontSize: 18, fontWeight: '800', color: colors.text },
-
-  warnCard: {
-    backgroundColor: colors.warningSoft,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    gap: 4,
-  },
-  warnTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 0.8, color: colors.text },
-
-  error: { ...type.small, color: colors.danger },
-  linkButton: { alignItems: 'center', paddingVertical: spacing.md },
-  linkText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
+  verdict: { fontFamily: fonts.sansBlack, fontSize: 17, color: colors.ink, marginTop: 8 },
 });

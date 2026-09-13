@@ -1,25 +1,31 @@
 /**
- * Screen 6 - Language selection (5.6).
+ * Language — the design's `isLanguage` screen.
  *
- * ROUGH LAYOUT. Structure only.
+ * ---------------------------------------------------------------------------
+ * TWO SENTENCES ON THIS SCREEN ARE LOAD-BEARING AND BOTH ARE KEPT VERBATIM.
  *
- * Two things this screen has to communicate, and they are easy to get wrong:
+ *   "Changing this never restarts your case."
  *
- *  1. Each language is written IN that language. Someone who reads only Telugu
- *     cannot find "Telugu" in a list of English words, which is the entire
- *     population this feature exists for.
- *  2. Translation preserves TONE, not just meaning (8). The note at the bottom
- *     says so, because a user who has been told "we translate" reasonably
- *     expects a machine-literal result and may distrust a warm one.
+ * Someone mid-interview, frightened, in the wrong language, must be able to
+ * switch without fearing they will lose what they have already said. If they
+ * cannot be sure of that, they will keep struggling in English — which is worse
+ * than any translation error.
  *
- * Switching language does NOT restart the case: evidence, risk and confidence
- * are language-independent, and losing an interview because someone changed
- * language mid-emergency would be indefensible.
+ *   "Risk tiers, allowed outcomes and safety gates are identical in every
+ *    language."
+ *
+ * The model translates the WORDS. It does not translate the decision. Tier,
+ * routing policy and the press-and-hold gate all live in `@triage/shared` and
+ * are computed before any language is chosen — a Hindi speaker and an English
+ * speaker with identical symptoms get identical outcomes, and the screen says
+ * so out loud rather than leaving it to be assumed.
+ * ---------------------------------------------------------------------------
  */
 
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { LANGUAGE_LABELS, SUPPORTED_LANGUAGES, type Language } from '@triage/shared';
-import { colors, radius, spacing, type } from '../theme';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import type { Language } from '@triage/shared';
+import { BackLink } from '../ui/primitives';
+import { colors, fonts, glass, radius, spacing, type } from '../theme';
 
 interface Props {
   readonly current: Language;
@@ -27,88 +33,91 @@ interface Props {
   readonly onBack: () => void;
 }
 
-/** Native-script name first; the English name is the subtitle, not the label. */
-const NATIVE_NAME: Record<Language, string> = {
-  en: 'English',
-  hi: 'हिन्दी',
-  te: 'తెలుగు',
-  ta: 'தமிழ்',
-};
+/**
+ * Native script first; the English name is the subtitle.
+ *
+ * A language picker that lists "Hindi" rather than "हिन्दी" is only usable by
+ * someone who already reads English — which is exactly the person who does not
+ * need it.
+ */
+const LANGUAGES: readonly { readonly code: Language; readonly native: string; readonly english: string }[] = [
+  { code: 'en', native: 'English', english: 'English' },
+  { code: 'hi', native: 'हिन्दी', english: 'Hindi' },
+  { code: 'te', native: 'తెలుగు', english: 'Telugu' },
+  { code: 'ta', native: 'தமிழ்', english: 'Tamil' },
+];
 
 export function LanguageScreen({ current, onSelect, onBack }: Props) {
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+    <View style={styles.root}>
+      <BackLink onPress={onBack} />
+
       <Text style={type.h1}>Language</Text>
-      <Text style={type.small}>The assistant will speak and ask questions in this language.</Text>
+      <Text style={[type.small, { marginTop: -6 }]}>Changing this never restarts your case.</Text>
 
-      {SUPPORTED_LANGUAGES.map((code) => {
-        const selected = code === current;
-        return (
-          <Pressable
-            key={code}
-            onPress={() => onSelect(code)}
-            style={[styles.option, selected && styles.optionSelected]}
-            accessibilityRole="radio"
-            accessibilityState={{ selected }}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.native, selected && { color: colors.primary }]}>
-                {NATIVE_NAME[code]}
-              </Text>
-              <Text style={type.small}>{LANGUAGE_LABELS[code]}</Text>
-            </View>
-            {/* Not colour alone - the selected row is also marked in text. */}
-            {selected ? <Text style={styles.selectedMark}>SELECTED</Text> : null}
-          </Pressable>
-        );
-      })}
-
-      <View style={styles.noteCard}>
-        <Text style={type.h3}>Tone is preserved, not just words</Text>
-        <Text style={type.small}>
-          An urgent instruction stays urgent and a calm one stays calm. Numbers, times and
-          medication names are never translated.
-        </Text>
+      <View style={styles.list}>
+        {LANGUAGES.map((language) => {
+          const selected = language.code === current;
+          return (
+            <Pressable
+              key={language.code}
+              onPress={() => onSelect(language.code)}
+              style={({ pressed }) => [
+                selected ? styles.rowSelected : [glass('plain'), styles.row],
+                pressed ? { transform: [{ scale: 0.98 }] } : null,
+              ]}
+            >
+              <View style={{ flex: 1 }}>
+                {/* Generous line-height: Devanagari, Telugu and Tamil all have
+                    ascenders and descenders that English does not, and a tight
+                    box clips them on Android. */}
+                <Text style={styles.native}>{language.native}</Text>
+                <Text style={[type.small, { marginTop: 2, fontSize: 11 }]}>{language.english}</Text>
+              </View>
+              {selected ? (
+                <View style={styles.check}>
+                  <Text style={styles.checkGlyph}>✓</Text>
+                </View>
+              ) : null}
+            </Pressable>
+          );
+        })}
       </View>
 
-      <Text style={styles.caveat}>
-        Changing language does not restart your case. Everything already recorded is kept.
+      <Text style={[type.foot, { marginTop: 4 }]}>
+        Translation preserves tone as well as literal meaning. Risk tiers, allowed outcomes and
+        safety gates are identical in every language.
       </Text>
-
-      <Pressable onPress={onBack} style={styles.linkButton}>
-        <Text style={styles.linkText}>Back</Text>
-      </Pressable>
-    </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md },
-
-  option: {
+  root: { gap: spacing.lg },
+  list: { gap: spacing.md, marginTop: 4 },
+  row: {
+    borderRadius: radius.lg,
+    padding: 18,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
   },
-  optionSelected: { borderColor: colors.primary, borderWidth: 2 },
-  native: { fontSize: 22, fontWeight: '700', color: colors.text },
-  selectedMark: { ...type.tiny, color: colors.primary, fontWeight: '700', letterSpacing: 0.6 },
-
-  noteCard: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.xs,
-    marginTop: spacing.sm,
+  rowSelected: {
+    backgroundColor: 'rgba(29,78,216,0.1)',
+    borderWidth: 2,
+    borderColor: colors.brand,
+    borderRadius: radius.lg,
+    padding: 17,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  caveat: { ...type.tiny, textAlign: 'center' },
-  linkButton: { alignItems: 'center', paddingVertical: spacing.md },
-  linkText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
+  native: { fontFamily: fonts.sansBold, fontSize: 21, lineHeight: 32, color: colors.ink },
+  check: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.brand,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkGlyph: { fontFamily: fonts.sansBold, fontSize: 12, color: colors.white },
 });

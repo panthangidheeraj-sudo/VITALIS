@@ -138,7 +138,19 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
 export const api = {
   baseUrl: BASE_URL,
 
-  health: () => request<{ ok: boolean; firestoreEnabled: boolean; clinicalScorer: string }>('/health'),
+  /**
+   * Capability report. The app asks the SERVER what is available rather than
+   * assuming — see the route's own comment for why that matters.
+   */
+  health: () =>
+    request<{
+      ok: boolean;
+      firestoreEnabled: boolean;
+      clinicalScorer: string;
+      visionEnabled?: boolean;
+      reasoningEnabled?: boolean;
+      notificationsLive?: boolean;
+    }>('/health'),
 
   createCase: (input: {
     /** Anonymous-auth uid; the server stores it as `CaseState.ownerUid`. */
@@ -151,6 +163,16 @@ export const api = {
 
   submitText: (caseId: CaseId, text: string, fromCaregiver = false) =>
     request<TurnResponse>(`/cases/${caseId}/turns`, { kind: 'text', text, fromCaregiver }),
+
+  /**
+   * An injury photo, as a turn.
+   *
+   * `photoRef` is a base64 data URL — the server's vision adapter refuses a
+   * bare reference, because an image the server cannot read is a wiring bug
+   * rather than a model failure and should say so instead of calling the API.
+   */
+  submitPhoto: (caseId: CaseId, photoRef: string) =>
+    request<TurnResponse>(`/cases/${caseId}/turns`, { kind: 'photo', photoRef }),
 
   submitQuickSelect: (caseId: CaseId, tags: readonly string[]) =>
     request<TurnResponse>(`/cases/${caseId}/turns`, {

@@ -23,10 +23,11 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { DEMO_CONTACTS, DEMO_DEMOGRAPHICS, DEMO_EMERGENCY_CARD } from '../data/demoProfile';
-import { colors, radius, spacing, type } from '../theme';
+import { colors, fonts, glass, radius, shadow, spacing, type } from '../theme';
+import { BackLink, Label, NoticeCard } from '../ui/primitives';
 
 /**
  * Kept compact on purpose. QR density rises fast with payload length, and a
@@ -79,10 +80,17 @@ export function EmergencyQrScreen({ onBack }: { readonly onBack: () => void }) {
   }, []);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Text style={type.h1}>Emergency card</Text>
-      <Text style={type.small}>Show this to a paramedic. Works with no signal.</Text>
+    <View style={styles.root}>
+      <BackLink onPress={onBack} />
 
+      <Text style={type.h1}>Emergency QR</Text>
+      <Text style={[type.small, { marginTop: -6 }]}>
+        Show this to a paramedic. Works with no signal and no unlock.
+      </Text>
+
+      {/* White, not glass. A QR code needs maximum contrast and a quiet zone;
+          a translucent tinted panel is the one place in this design where the
+          house style would actively stop the thing from working. */}
       <View style={styles.qrPanel}>
         {Qr === undefined ? (
           <Text style={styles.qrFallback}>
@@ -95,63 +103,53 @@ export function EmergencyQrScreen({ onBack }: { readonly onBack: () => void }) {
 
       {/* Always rendered, never only inside the QR: a responder with a cracked
           camera, or no phone at all, still needs to read this. */}
-      <View style={styles.card}>
-        <Text style={styles.cardLabel}>WHAT THE CODE CONTAINS</Text>
+      <View style={[glass('blue'), styles.card]}>
+        <Label>WHAT THE CODE CONTAINS</Label>
         <Text style={styles.payload}>{payload}</Text>
       </View>
 
-      <View style={styles.noteCard}>
+      <View style={[glass('plain'), styles.card]}>
         <Text style={type.h3}>Reaching this from the lock screen</Text>
-        <Text style={type.small}>
-          Add these details to your phone's own Medical ID (iOS Health, or Android emergency
-          information) so responders can reach them without unlocking. This app cannot place a
-          widget on the lock screen while it runs through Expo Go.
+        <Text style={[type.small, { marginTop: 8 }]}>
+          {`Add these details to your phone's own Medical ID (iOS Health, or Android emergency information) so responders can reach them without unlocking. This app cannot place a widget on the lock screen while it runs through Expo Go.`}
         </Text>
       </View>
 
-      <Text style={styles.privacy}>
-        Anyone who can see this screen can read these details. That is deliberate - the card has to
-        work when there is no network and nobody can log in.
-      </Text>
-
-      <Pressable onPress={onBack} style={styles.linkButton}>
-        <Text style={styles.linkText}>Back</Text>
-      </Pressable>
-      <View style={{ height: spacing.xxl }} />
-    </ScrollView>
+      <NoticeCard accent={colors.warn} background={colors.warnWash} border="rgba(217,119,6,0.35)">
+        <Label color={colors.warnDeep}>THIS SCREEN IS NOT PRIVATE</Label>
+        <Text style={[type.small, { color: colors.warnInk, marginTop: 6 }]}>
+          Anyone who can see it can read these details. That is deliberate — the card has to work
+          when there is no network and nobody can log in.
+        </Text>
+      </NoticeCard>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md },
+  root: { gap: spacing.lg },
   qrPanel: {
     backgroundColor: '#FFFFFF',
-    borderRadius: radius.lg,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.xl,
+    borderRadius: radius.xxl,
+    padding: spacing.xxl,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 270,
+    ...shadow('lift'),
   },
-  qrFallback: { ...type.small, textAlign: 'center' },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
+  qrFallback: {
+    fontFamily: fonts.sans,
+    fontSize: 12.5,
+    lineHeight: 19,
+    color: colors.slate,
+    textAlign: 'center',
   },
-  cardLabel: { ...type.tiny, letterSpacing: 0.6, marginBottom: spacing.sm },
-  payload: { ...type.body, lineHeight: 21, fontFamily: 'monospace', fontSize: 12.5 },
-  noteCard: {
-    backgroundColor: colors.warningSoft,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    gap: spacing.xs,
+  card: { padding: spacing.xl, borderRadius: radius.lg },
+  payload: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    lineHeight: 18,
+    color: colors.inkSoft,
+    marginTop: 9,
   },
-  privacy: { ...type.tiny, lineHeight: 16 },
-  linkButton: { alignItems: 'center', paddingVertical: spacing.md },
-  linkText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
 });

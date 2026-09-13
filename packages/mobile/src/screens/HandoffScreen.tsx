@@ -1,29 +1,38 @@
 /**
- * Screen 7 - Doctor Handoff Timeline (5.3).
+ * The doctor handoff card — the design's `isHandoff` screen.
  *
- * ROUGH LAYOUT. Structure only - but the INFORMATION ORDER here is not
- * placeholder, because it is what the spec judges: a clinician has to read this
- * in seconds, so it opens with severity, elapsed time and the classic-
- * presentation flag, and the timeline comes last.
+ * ---------------------------------------------------------------------------
+ * THIS IS THE SCREEN A CLINICIAN READS, SO IT IS THE STRICTEST ONE.
  *
- * Every clinical number on this screen is read from `deriveClinicalFields`,
- * whose only input is the `RiskAssessment` from the scoring engine. Nothing on
- * this screen accepts a severity from anywhere else, and the narrative fields a
- * model may write carry no numbers at all. That is the 5.3 requirement that
- * severity "trace back to the scoring engine, not be freeform-generated".
+ * Two rules govern everything on it, both from spec §7:
  *
- * The degradation line and the disclaimer are rendered unconditionally when
- * present. A handoff card that hides which engine produced its number is worse
- * than no card.
+ *   FACT AND INFERENCE STAY SEPARATE. The patient's own words are quoted
+ *   verbatim, in their own language, never cleaned up or paraphrased. What the
+ *   agent CONCLUDED sits in different cards with different styling. A clinician
+ *   must always be able to tell which is which at a glance.
+ *
+ *   SEVERITY TRACES TO THE ENGINE BY CONSTRUCTION. Every clinical number comes
+ *   from `deriveClinicalFields` over `state.risk`, which no model can write to.
+ *   The SCORING SOURCE panel at the bottom names the engine that actually ran.
+ *
+ * The design's version of that panel reads `engine: infermedica /triage`. This
+ * system does not call Infermedica — the tier comes from the local
+ * deterministic rule engine — so the panel reads `risk.source` instead. A
+ * handoff card that names the wrong vendor is a clinical document with a
+ * falsehood in it.
+ * ---------------------------------------------------------------------------
  */
 
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import type { CaseId, CaseState, TimelineEntry } from '@triage/shared';
+import { StyleSheet, Text, View } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
+import type { CaseId, CaseState } from '@triage/shared';
 import { HANDOFF_DISCLAIMER, deriveClinicalFields } from '@triage/shared';
 import { useCaseState } from '../firebase/useCaseState';
 import { isFirebaseConfigured } from '../firebase/client';
-import { DEMO_EMERGENCY_CARD } from '../data/demoProfile';
-import { colors, radius, spacing, tierColor, tierLabel, type } from '../theme';
+import { DEMO_DEMOGRAPHICS, DEMO_EMERGENCY_CARD } from '../data/demoProfile';
+import { clockTime } from '../state/caseView';
+import { BackLink, Label, NoticeCard, Stat, TimelineStrip } from '../ui/primitives';
+import { colors, fonts, glass, radius, shadow, spacing, tierColor, tierLabel, type } from '../theme';
 
 interface Props {
   readonly caseId: CaseId;
@@ -37,7 +46,8 @@ export function HandoffScreen({ caseId, onBack }: Props) {
   if (state === undefined) {
     return (
       <View style={styles.empty}>
-        <Text style={type.h3}>Preparing handoff summary...</Text>
+        <BackLink label="Tracking" onPress={onBack} />
+        <Text style={[type.h3, { marginTop: spacing.xl }]}>Preparing handoff summary…</Text>
         <Text style={type.small}>Waiting for case data.</Text>
       </View>
     );
@@ -45,207 +55,235 @@ export function HandoffScreen({ caseId, onBack }: Props) {
 
   const derived = deriveClinicalFields(state.risk);
   const quotes = state.evidence
-    .map((e) => e.rawText)
-    .filter((t): t is string => typeof t === 'string' && t.length > 0)
+    .filter((e) => typeof e.rawText === 'string' && e.rawText.length > 0)
     .slice(0, 4);
   const onset = state.evidence.find((e) => e.onsetAt !== undefined)?.onsetAt;
   const elapsed = onset === undefined ? undefined : minutesBetween(onset, state.updatedAt);
+  const unresolved = state.confidence.contradictions.filter((c) => c.resolvedAt === undefined);
+  const timeline = live.timeline.map((e) => ({ at: clockTime(e.at), text: e.summary }));
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      {/* Urgency banner. Red gets the full-bleed treatment (9). */}
-      <View style={[styles.banner, { backgroundColor: tierColor[derived.riskTier] }]}>
-        <Text style={styles.bannerLabel}>CLINICAL HANDOFF</Text>
-        <Text style={styles.bannerTitle}>{tierLabel[derived.riskTier]}</Text>
-        <Text style={styles.bannerSub}>{derived.triageLevel.replace(/_/g, ' ')}</Text>
-      </View>
+    <View style={styles.root}>
+      <BackLink label="Tracking" onPress={onBack} />
 
-      {/* The three numbers a clinician reaches for first. */}
+      <LinearGradient
+        colors={[tierColor[derived.riskTier], shade(tierColor[derived.riskTier])]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.hero}
+      >
+        <Label color="rgba(255,255,255,0.8)">CLINICAL HANDOFF</Label>
+        <Text style={styles.heroTitle}>{tierLabel[derived.riskTier]}</Text>
+        <Text style={styles.heroSub}>
+          {`${derived.triageLevel.replace(/_/g, ' ')} · ${DEMO_DEMOGRAPHICS.displayName ?? 'Patient'}, ${
+            state.demographics.ageYears
+          }, ${state.demographics.sex}`}
+        </Text>
+      </LinearGradient>
+
       <View style={styles.statRow}>
-        <Stat label="SEVERITY" value={`${derived.severityOutOfTen}/10`} />
-        <Stat label="ELAPSED" value={elapsed === undefined ? 'unknown' : `${elapsed} min`} />
-        <Stat label="CONFIDENCE" value={state.confidence.level.toUpperCase()} />
+        <Stat label="SEVERITY" value={derived.severityOutOfTen} unit="/10" />
+        <Stat label="ELAPSED" value={elapsed ?? '—'} unit={elapsed === undefined ? undefined : ' min'} />
+        <Stat
+          label="CONFIDENCE"
+          value={state.confidence.level.toUpperCase()}
+          valueStyle={styles.statWord}
+        />
       </View>
 
       {derived.classicPresentation ? (
-        <View style={styles.flagCard}>
-          <Text style={styles.flagTitle}>CLASSIC PRESENTATION</Text>
-          <Text style={type.small}>{derived.classicPresentationBasis.join(' + ')}</Text>
-          <Text style={type.tiny}>Flagged by the scoring engine, not by a language model.</Text>
-        </View>
+        <NoticeCard accent={colors.danger} background={colors.dangerWash} border="rgba(220,38,38,0.28)">
+          <Label color={colors.dangerDeep}>CLASSIC PRESENTATION</Label>
+          <Text style={styles.classicText}>{derived.classicPresentationBasis.join(' + ')}</Text>
+          <Text style={[type.foot, { color: colors.dangerInk, marginTop: 6 }]}>
+            Flagged by the rule-based scoring engine, not by a language model.
+          </Text>
+        </NoticeCard>
       ) : null}
 
-      <Card label="CHIEF COMPLAINT">
-        <Text style={type.h3}>{chiefComplaint(state)}</Text>
-        {onset !== undefined ? (
-          <Text style={type.small}>Onset {onset.slice(11, 16)}</Text>
-        ) : (
-          <Text style={type.small}>Onset time not established</Text>
-        )}
-      </Card>
+      <View style={[glass('blue'), styles.card]}>
+        <Label>CHIEF COMPLAINT</Label>
+        <Text style={styles.chief}>{chiefComplaint(state)}</Text>
+        <Text style={[type.small, { marginTop: 3 }]}>
+          {onset === undefined ? 'Onset time not established' : `Onset ${clockTime(onset)}`}
+          {/* The live ICD-11 lookup is wired on the server but is not yet
+              threaded onto the case document, so this states that rather than
+              printing a code nobody looked up. */}
+          {' · ICD-11 '}
+          <Text style={styles.code}>not yet coded</Text>
+        </Text>
+      </View>
 
-      {/* Verbatim, never paraphrased (5.3). */}
-      <Card label="PATIENT'S OWN WORDS">
+      {/* Verbatim. Never paraphrased, never tidied, never translated (§7). */}
+      <View style={[glass('blue'), styles.card]}>
+        <Label style={{ marginBottom: 11 }}>{`PATIENT'S OWN WORDS · VERBATIM`}</Label>
         {quotes.length === 0 ? (
           <Text style={type.small}>No free-text statements recorded.</Text>
         ) : (
-          quotes.map((quote, i) => (
-            <Text key={i} style={styles.quote}>
-              "{quote}"
-            </Text>
-          ))
-        )}
-        <Text style={type.tiny}>Language: {state.language.toUpperCase()}</Text>
-      </Card>
-
-      <Card label="ALLERGIES / MEDICATIONS">
-        <Text style={styles.alertText}>
-          {DEMO_EMERGENCY_CARD.allergies.join(', ') || 'None reported'}
-        </Text>
-        <Text style={type.small}>
-          {DEMO_EMERGENCY_CARD.medications.map((m) => m.normalizedName ?? m.reportedName).join(', ')}
-        </Text>
-        <Text style={type.tiny}>Medication names normalised via RxNorm. Interactions not checked.</Text>
-      </Card>
-
-      {state.confidence.contradictions.filter((c) => c.resolvedAt === undefined).length > 0 ? (
-        <View style={styles.warnCard}>
-          <Text style={styles.flagTitle}>UNRESOLVED CONTRADICTIONS</Text>
-          {state.confidence.contradictions
-            .filter((c) => c.resolvedAt === undefined)
-            .map((c, i) => (
-              <Text key={i} style={type.small}>
-                {c.detail}
+          quotes.map((item, i) => (
+            <View key={String(item.id) || i} style={styles.quoteBlock}>
+              <Text style={styles.quoteText}>{`“${item.rawText ?? ''}”`}</Text>
+              <Text style={styles.quoteMeta}>
+                {`${clockTime(item.observedAt)} · ${item.source === 'caregiver_report' ? 'caregiver' : 'patient'}, ${state.language.toUpperCase()}`}
               </Text>
-            ))}
-          <Text style={type.tiny}>Re-verify these directly with the patient.</Text>
-        </View>
-      ) : null}
-
-      <Card label="TIMELINE">
-        {live.timeline.length === 0 ? (
-          <Text style={type.small}>No entries yet.</Text>
-        ) : (
-          live.timeline.map((entry: TimelineEntry) => (
-            <View key={String(entry.id)} style={styles.timelineRow}>
-              <Text style={styles.timelineTime}>{entry.at.slice(11, 16)}</Text>
-              <Text style={styles.timelineText}>{entry.summary}</Text>
             </View>
           ))
         )}
-      </Card>
-
-      <Card label="CODING">
-        <Text style={type.body}>ICD-11 code pending</Text>
-        <Text style={type.tiny}>
-          Codes the category the scoring engine derived. The system does not diagnose.
+        <Text style={[type.foot, { marginTop: 4 }]}>
+          {`Language: ${state.language.toUpperCase()} · never paraphrased or cleaned up.`}
         </Text>
-      </Card>
+      </View>
 
-      {/* Never hidden: which engine produced the number above. */}
-      {derived.scoringDegradedReason !== undefined ? (
-        <View style={styles.degradedCard}>
-          <Text style={styles.flagTitle}>SCORING SOURCE: {derived.scoringSource.toUpperCase()}</Text>
-          <Text style={type.small}>{derived.scoringDegradedReason}</Text>
-        </View>
+      <View style={[glass('blue'), styles.card]}>
+        <Label>ALLERGIES</Label>
+        <Text style={styles.allergies}>
+          {DEMO_EMERGENCY_CARD.allergies.join(' · ') || 'None reported'}
+        </Text>
+
+        <Label style={{ marginTop: 15 }}>MEDICATIONS</Label>
+        <Text style={styles.meds}>
+          {DEMO_EMERGENCY_CARD.medications
+            .map((m) => m.normalizedName ?? m.reportedName)
+            .join(' · ') || 'None reported'}
+        </Text>
+        <Text style={[type.foot, { marginTop: 6 }]}>
+          Names normalised via RxNorm. Interaction checking is NOT available in this system — the
+          RxNav interaction endpoint was retired in January 2024.
+        </Text>
+
+        <Label style={{ marginTop: 15 }}>CHRONIC CONDITIONS</Label>
+        <Text style={styles.meds}>
+          {DEMO_EMERGENCY_CARD.chronicConditions.join(' · ') || 'None reported'}
+        </Text>
+      </View>
+
+      {unresolved.length > 0 ? (
+        <NoticeCard accent={colors.warn} background={colors.warnWash} border="rgba(217,119,6,0.32)">
+          <Label color={colors.warnDeep}>{`UNRESOLVED CONTRADICTION · ${unresolved.length}`}</Label>
+          {unresolved.map((c, i) => (
+            <Text key={i} style={[type.body, { color: colors.warnInk, marginTop: 7 }]}>
+              {c.detail}
+            </Text>
+          ))}
+          <Text style={[type.foot, { color: colors.warnInk, marginTop: 7 }]}>
+            Not settled. Re-verify directly with the patient before acting on it.
+          </Text>
+        </NoticeCard>
       ) : null}
 
-      <Text style={styles.disclaimer}>{HANDOFF_DISCLAIMER}</Text>
+      <View style={[glass('blue'), styles.card, { paddingRight: 0 }]}>
+        <Label style={{ marginBottom: 11 }}>CASE TIMELINE</Label>
+        {timeline.length === 0 ? (
+          <Text style={type.small}>No entries yet.</Text>
+        ) : (
+          <TimelineStrip entries={timeline} activeIndex={timeline.length - 1} />
+        )}
+      </View>
 
-      <Text style={styles.linkText} onPress={onBack}>
-        Back
-      </Text>
-      <View style={{ height: spacing.xxl }} />
-    </ScrollView>
+      {/* The provenance panel. Reads the engine that ACTUALLY ran. */}
+      <View style={styles.sourcePanel}>
+        <Label color={colors.ledgerDim}>SCORING SOURCE</Label>
+        <Text style={styles.sourceText}>
+          {`engine: ${derived.scoringSource}\n`}
+          {`level: ${derived.triageLevel} → ${tierLabel[derived.riskTier]}\n`}
+          {'model contribution: none (no schema field exists)'}
+        </Text>
+        {derived.scoringDegradedReason === undefined ? null : (
+          <Text style={[styles.sourceText, { color: '#fbbf24' }]}>
+            {`degraded: ${derived.scoringDegradedReason}`}
+          </Text>
+        )}
+        <Text style={styles.disclaimer}>{HANDOFF_DISCLAIMER}</Text>
+      </View>
+    </View>
   );
 }
 
 function chiefComplaint(state: CaseState): string {
-  const first = state.evidence.find((e) => e.source === 'initial_complaint') ?? state.evidence[0];
-  return first?.commonName ?? first?.name ?? 'Not yet established';
+  const first = state.evidence.find((e) => e.rawText !== undefined && e.rawText.length > 0);
+  if (first !== undefined) return first.commonName ?? first.name;
+  return state.risk.rootCause?.replace(/^red_flag:/, '') ?? 'Not yet established';
 }
 
 function minutesBetween(from: string, to: string): number {
-  return Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 60000));
+  return Math.max(0, Math.round((new Date(to).getTime() - new Date(from).getTime()) / 60000));
 }
 
-function Stat({ label, value }: { readonly label: string; readonly value: string }) {
-  return (
-    <View style={styles.stat}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
-    </View>
-  );
-}
-
-function Card({ label, children }: { readonly label: string; readonly children: React.ReactNode }) {
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardLabel}>{label}</Text>
-      {children}
-    </View>
-  );
+/**
+ * A slightly darker companion for the hero gradient.
+ *
+ * The tier palette is a single colour per tier, and a flat band looks
+ * noticeably cheaper than the design's gradient. Rather than add four more
+ * hand-picked colours nobody would keep in sync, this darkens the one that
+ * already exists.
+ */
+function shade(hex: string): string {
+  const n = parseInt(hex.slice(1), 16);
+  const dim = (v: number) => Math.max(0, Math.round(v * 0.78));
+  const r = dim((n >> 16) & 255);
+  const g = dim((n >> 8) & 255);
+  const b = dim(n & 255);
+  return `rgb(${r},${g},${b})`;
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-
-  banner: { borderRadius: radius.lg, padding: spacing.lg },
-  bannerLabel: { color: '#FFFFFFCC', fontSize: 11, letterSpacing: 1, fontWeight: '700' },
-  bannerTitle: { color: '#FFFFFF', fontSize: 26, fontWeight: '800', marginTop: 2 },
-  bannerSub: { color: '#FFFFFFDD', fontSize: 13, textTransform: 'capitalize' },
-
-  statRow: { flexDirection: 'row', gap: spacing.sm },
-  stat: {
-    flex: 1,
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.md,
+  root: { gap: spacing.lg },
+  empty: { paddingVertical: spacing.xxl, gap: spacing.sm },
+  hero: { borderRadius: radius.xl, padding: 18, ...shadow('lift') },
+  heroTitle: {
+    fontFamily: fonts.sansBlack,
+    fontSize: 26,
+    lineHeight: 28,
+    color: colors.white,
+    marginTop: 10,
+    letterSpacing: -0.4,
   },
-  statLabel: { ...type.tiny, letterSpacing: 0.6 },
-  statValue: { fontSize: 18, fontWeight: '700', color: colors.text },
-
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.xs,
+  heroSub: {
+    fontFamily: fonts.sansMedium,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.9)',
+    marginTop: 5,
   },
-  cardLabel: { ...type.tiny, letterSpacing: 0.6, marginBottom: spacing.xs },
-
-  flagCard: {
-    backgroundColor: colors.dangerSoft,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    gap: 2,
+  statRow: { flexDirection: 'row', gap: 9 },
+  statWord: { fontSize: 15, lineHeight: 19 },
+  card: { padding: spacing.xl, borderRadius: radius.lg },
+  classicText: {
+    fontFamily: fonts.sansSemi,
+    fontSize: 13,
+    lineHeight: 19,
+    color: colors.ink,
+    marginTop: 8,
   },
-  warnCard: {
-    backgroundColor: colors.warningSoft,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    gap: 2,
+  chief: { fontFamily: fonts.sansBold, fontSize: 16, color: colors.ink, marginTop: 9 },
+  code: { fontFamily: fonts.mono, color: colors.inkSoft },
+  quoteBlock: {
+    borderLeftWidth: 3,
+    borderLeftColor: 'rgba(29,78,216,0.35)',
+    paddingLeft: 11,
+    marginBottom: 9,
   },
-  degradedCard: {
-    backgroundColor: colors.warningSoft,
-    borderRadius: radius.md,
-    padding: spacing.lg,
-    gap: 2,
+  quoteText: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 20, color: colors.ink },
+  quoteMeta: { fontFamily: fonts.monoMedium, fontSize: 10, color: colors.labelDim, marginTop: 4 },
+  allergies: {
+    fontFamily: fonts.sansBlack,
+    fontSize: 17,
+    color: colors.dangerDeep,
+    marginTop: 8,
   },
-  flagTitle: { fontSize: 12, fontWeight: '800', letterSpacing: 0.8, color: colors.text },
-
-  quote: { ...type.body, fontStyle: 'italic', marginVertical: 2 },
-  alertText: { ...type.body, fontWeight: '700', color: colors.danger },
-
-  timelineRow: { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.xs },
-  timelineTime: { ...type.mono, width: 44 },
-  timelineText: { ...type.small, flex: 1, color: colors.text },
-
-  disclaimer: { ...type.tiny, lineHeight: 16, marginTop: spacing.sm },
-  linkText: { color: colors.primary, fontSize: 15, fontWeight: '600', textAlign: 'center', paddingVertical: spacing.md },
+  meds: { fontFamily: fonts.sansMedium, fontSize: 13, lineHeight: 21, color: colors.ink, marginTop: 7 },
+  sourcePanel: { backgroundColor: colors.ledger, borderRadius: radius.md, padding: 14 },
+  sourceText: {
+    fontFamily: fonts.monoMedium,
+    fontSize: 11.5,
+    lineHeight: 18,
+    color: 'rgba(255,255,255,0.88)',
+    marginTop: 8,
+  },
+  disclaimer: {
+    fontFamily: fonts.sans,
+    fontSize: 10.5,
+    lineHeight: 16,
+    color: 'rgba(255,255,255,0.6)',
+    marginTop: 9,
+  },
 });

@@ -1,175 +1,180 @@
 /**
- * Screen 5 - One-Tap Emergency Card (5.6).
+ * The emergency card — the design's `isCard` screen.
  *
- * ROUGH LAYOUT. Structure and information hierarchy only; final visual design
- * comes later.
+ * ---------------------------------------------------------------------------
+ * THE TYPE SIZES ARE THE DESIGN, AND THEY ARE NOT DECORATIVE.
  *
- * The ordering is the design decision worth keeping: blood group and allergies
- * sit at the top at the largest size, because the two questions a paramedic
- * asks an unconscious patient's phone are "what is their blood group" and "what
- * will kill them". Everything else can be scrolled to.
+ * Blood group at 52px and allergies at 26px are not styling choices — this card
+ * is read by a stranger, at arm's length, in bad light, possibly through a
+ * cracked screen, while someone is on the floor. The two facts that change what
+ * a responder does in the first sixty seconds are the two that are enormous.
  *
- * The card is readable WITHOUT unlocking anything and without a network call -
- * it is local data. A card that needs a signal is not an emergency card.
+ * Everything else on the screen is deliberately quieter than those two.
+ * ---------------------------------------------------------------------------
+ *
+ * It opens with no network and no passcode. All of it is device-local, which is
+ * also why it is still demo data — the profile editor is not built yet, and the
+ * screen says so rather than implying a responder is reading something the user
+ * entered.
  */
 
-import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import {
-  DEMO_CONTACTS,
-  DEMO_DEMOGRAPHICS,
-  DEMO_EMERGENCY_CARD,
-  type EmergencyContact,
-} from '../data/demoProfile';
-import { colors, radius, spacing, type } from '../theme';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { DEMO_CONTACTS, DEMO_DEMOGRAPHICS, DEMO_EMERGENCY_CARD } from '../data/demoProfile';
+import { BackLink, Label } from '../ui/primitives';
+import { colors, fonts, glass, radius, shadow, spacing, type } from '../theme';
 
 export function EmergencyCardScreen({ onBack }: { readonly onBack: () => void }) {
   const card = DEMO_EMERGENCY_CARD;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <View style={styles.header}>
-        <Text style={type.h1}>{DEMO_DEMOGRAPHICS.displayName}</Text>
-        <Text style={type.small}>
-          {DEMO_DEMOGRAPHICS.ageYears} years / {DEMO_DEMOGRAPHICS.sex}
-        </Text>
-      </View>
+    <View style={styles.root}>
+      <BackLink onPress={onBack} />
 
-      {/* The two fields a paramedic needs first, sized accordingly. */}
-      <View style={styles.criticalRow}>
-        <View style={[styles.criticalCard, { backgroundColor: colors.dangerSoft }]}>
-          <Text style={styles.criticalLabel}>BLOOD GROUP</Text>
-          <Text style={styles.criticalValue}>{card.bloodGroup ?? 'UNKNOWN'}</Text>
+      <Text style={type.h1}>Emergency card</Text>
+      <Text style={[type.small, { marginTop: -6 }]}>
+        Stored on this device. Opens without a passcode or a signal.
+      </Text>
+
+      <View style={[glass('strong'), styles.hero]}>
+        <View style={styles.heroRow}>
+          <View>
+            <Label>BLOOD GROUP</Label>
+            <Text style={styles.bloodGroup}>{card.bloodGroup ?? '—'}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={styles.name}>{DEMO_DEMOGRAPHICS.displayName ?? 'Unnamed'}</Text>
+            <Text style={[type.small, { marginTop: 2 }]}>
+              {`${DEMO_DEMOGRAPHICS.ageYears} · ${DEMO_DEMOGRAPHICS.sex}`}
+            </Text>
+            {card.organDonor === true ? <Text style={styles.donor}>ORGAN DONOR</Text> : null}
+          </View>
         </View>
-        <View style={[styles.criticalCard, { backgroundColor: colors.warningSoft }]}>
-          <Text style={styles.criticalLabel}>ALLERGIES</Text>
-          <Text style={styles.criticalValueSmall}>
-            {card.allergies.length > 0 ? card.allergies.join(', ') : 'None reported'}
+
+        <View style={styles.allergyBlock}>
+          <Label>ALLERGIES</Label>
+          <Text style={styles.allergies}>
+            {card.allergies.length === 0 ? 'None known' : card.allergies.join('\n')}
           </Text>
         </View>
       </View>
 
-      <Section label="CURRENT MEDICATIONS">
-        {card.medications.map((med) => (
-          <View key={med.reportedName} style={styles.row}>
-            <Text style={styles.rowMain}>{med.reportedName}</Text>
-            {/* The RxNorm name is what a hospital system recognises; the
-                patient's own wording is kept beside it, never replaced. */}
-            {med.normalizedName !== undefined ? (
-              <Text style={type.tiny}>RxNorm: {med.normalizedName}</Text>
-            ) : null}
+      <View style={[glass('plain'), styles.card]}>
+        <Label>MEDICATIONS</Label>
+        <Text style={styles.listText}>
+          {card.medications.map((m) => m.reportedName).join('\n') || 'None'}
+        </Text>
+        <Text style={[type.foot, { marginTop: 7 }]}>
+          RxNorm-normalised names only. Interactions are NOT checked — the RxNav interaction
+          endpoint was retired in January 2024.
+        </Text>
+
+        <Label style={{ marginTop: 16 }}>CHRONIC CONDITIONS</Label>
+        <Text style={styles.listText}>{card.chronicConditions.join(' · ') || 'None recorded'}</Text>
+      </View>
+
+      <View style={[glass('plain'), styles.contactCard]}>
+        <Label style={{ paddingTop: 12, paddingBottom: 4 }}>EMERGENCY CONTACTS</Label>
+        {DEMO_CONTACTS.map((contact) => (
+          <View key={contact.phone} style={styles.contactRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.contactName}>
+                {contact.name}
+                {contact.isPrimary ? <Text style={styles.primaryTag}>{'  PRIMARY'}</Text> : null}
+              </Text>
+              <Text style={[type.small, { marginTop: 2 }]}>
+                {`${contact.relationship} · ${contact.phone}`}
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => void Linking.openURL(`tel:${contact.phone.replace(/\s/g, '')}`)}
+              style={({ pressed }) => [
+                contact.isPrimary ? styles.callPrimary : styles.callSecondary,
+                pressed ? { transform: [{ scale: 0.95 }] } : null,
+              ]}
+            >
+              <Text style={contact.isPrimary ? styles.callPrimaryText : styles.callSecondaryText}>
+                Call
+              </Text>
+            </Pressable>
           </View>
         ))}
-        <Text style={styles.caveat}>
-          Names verified against RxNorm. Drug interactions are NOT checked.
-        </Text>
-      </Section>
-
-      <Section label="CHRONIC CONDITIONS">
-        <Text style={type.body}>{card.chronicConditions.join(' / ')}</Text>
-      </Section>
-
-      <Section label="EMERGENCY CONTACTS">
-        {DEMO_CONTACTS.map((contact) => (
-          <ContactRow key={contact.phone} contact={contact} />
-        ))}
-      </Section>
-
-      {card.notes !== undefined ? (
-        <Section label="NOTES FOR RESPONDERS">
-          <Text style={type.body}>{card.notes}</Text>
-        </Section>
-      ) : null}
-
-      <View style={styles.metaRow}>
-        <Text style={type.tiny}>
-          {card.organDonor === true ? 'Registered organ donor' : 'Organ donor: not stated'}
-        </Text>
-        <Text style={type.tiny}>Updated {card.updatedAt.slice(0, 10)}</Text>
       </View>
 
-      <Text style={styles.offlineNote}>
-        This card is stored on the device and opens with no signal.
+      {card.notes === undefined ? null : (
+        <View style={[glass('plain'), styles.card]}>
+          <Label>NOTES FOR RESPONDERS</Label>
+          <Text style={styles.notes}>{card.notes}</Text>
+          <Text style={[type.foot, { marginTop: 9 }]}>
+            {`Updated ${new Date(card.updatedAt).toLocaleString()}`}
+          </Text>
+        </View>
+      )}
+
+      {/* Said plainly rather than implied. A responder must not assume the
+          patient typed this. */}
+      <Text style={styles.sampleNote}>
+        This card is sample data. The profile editor is not built yet, so nothing here was entered
+        by the person holding the phone.
       </Text>
-
-      <Pressable onPress={onBack} style={styles.linkButton}>
-        <Text style={styles.linkText}>Back</Text>
-      </Pressable>
-      <View style={{ height: spacing.xxl }} />
-    </ScrollView>
-  );
-}
-
-function ContactRow({ contact }: { readonly contact: EmergencyContact }) {
-  return (
-    <Pressable style={styles.contactRow} onPress={() => void Linking.openURL(`tel:${contact.phone}`)}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.rowMain}>
-          {contact.name}
-          {contact.isPrimary ? '  -  PRIMARY' : ''}
-        </Text>
-        <Text style={type.small}>
-          {contact.relationship} / {contact.phone}
-        </Text>
-      </View>
-      <Text style={styles.callChip}>CALL</Text>
-    </Pressable>
-  );
-}
-
-function Section({
-  label,
-  children,
-}: {
-  readonly label: string;
-  readonly children: React.ReactNode;
-}) {
-  return (
-    <View style={styles.card}>
-      <Text style={styles.cardLabel}>{label}</Text>
-      {children}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: { padding: spacing.lg, gap: spacing.md },
-  header: { gap: 2 },
-
-  criticalRow: { flexDirection: 'row', gap: spacing.sm },
-  criticalCard: { flex: 1, borderRadius: radius.md, padding: spacing.lg, minHeight: 96 },
-  criticalLabel: { ...type.tiny, letterSpacing: 0.6, color: colors.text },
-  criticalValue: { fontSize: 40, fontWeight: '800', color: colors.text, marginTop: spacing.xs },
-  criticalValueSmall: { fontSize: 15, fontWeight: '700', color: colors.text, marginTop: spacing.sm },
-
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.lg,
-    gap: spacing.xs,
+  root: { gap: spacing.lg },
+  hero: { borderRadius: radius.xxl, padding: spacing.xxl, ...shadow('lift') },
+  heroRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 14 },
+  bloodGroup: {
+    fontFamily: fonts.sansBlack,
+    fontSize: 52,
+    lineHeight: 54,
+    color: colors.dangerDeep,
+    marginTop: 10,
+    letterSpacing: -2,
   },
-  cardLabel: { ...type.tiny, letterSpacing: 0.6, marginBottom: spacing.xs },
-  row: { paddingVertical: spacing.xs },
-  rowMain: { ...type.body, fontWeight: '600' },
-  caveat: { ...type.tiny, marginTop: spacing.sm, fontStyle: 'italic' },
-
-  contactRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.sm },
-  callChip: {
-    ...type.tiny,
-    color: colors.primary,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.pill,
-    borderWidth: 1,
-    borderColor: colors.primary,
+  name: { fontFamily: fonts.sansBold, fontSize: 15, color: colors.ink },
+  donor: { fontFamily: fonts.monoBold, fontSize: 9.5, color: colors.ok, marginTop: 8, letterSpacing: 0.6 },
+  allergyBlock: {
+    marginTop: 18,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(15,23,42,0.09)',
   },
-
-  metaRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  offlineNote: { ...type.tiny, textAlign: 'center', marginTop: spacing.sm },
-  linkButton: { alignItems: 'center', paddingVertical: spacing.md },
-  linkText: { color: colors.primary, fontSize: 15, fontWeight: '600' },
+  allergies: {
+    fontFamily: fonts.sansBlack,
+    fontSize: 26,
+    lineHeight: 32,
+    color: colors.dangerDeep,
+    marginTop: 9,
+    letterSpacing: -0.5,
+  },
+  card: { padding: spacing.xl, borderRadius: radius.lg },
+  listText: { fontFamily: fonts.sansSemi, fontSize: 14, lineHeight: 24, color: colors.ink, marginTop: 9 },
+  contactCard: { paddingHorizontal: spacing.xl, borderRadius: radius.lg },
+  contactRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 13,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(15,23,42,0.07)',
+  },
+  contactName: { fontFamily: fonts.sansBold, fontSize: 13.5, color: colors.ink },
+  primaryTag: { fontFamily: fonts.monoSemi, fontSize: 9.5, color: colors.brand, letterSpacing: 0.6 },
+  callPrimary: {
+    backgroundColor: colors.brand,
+    borderRadius: radius.sm,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+  },
+  callPrimaryText: { fontFamily: fonts.sansBold, fontSize: 11.5, color: colors.white },
+  callSecondary: {
+    backgroundColor: 'rgba(29,78,216,0.1)',
+    borderRadius: radius.sm,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+  },
+  callSecondaryText: { fontFamily: fonts.sansBold, fontSize: 11.5, color: colors.brand },
+  notes: { fontFamily: fonts.sans, fontSize: 13, lineHeight: 21, color: colors.ink, marginTop: 9 },
+  sampleNote: { ...type.foot, textAlign: 'center' },
 });

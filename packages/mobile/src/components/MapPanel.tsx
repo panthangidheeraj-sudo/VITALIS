@@ -14,7 +14,8 @@
  */
 
 import { StyleSheet, Text, View } from 'react-native';
-import { colors, radius, spacing, type } from '../theme';
+import { colors, fonts, radius, spacing, type } from '../theme';
+import { Label } from '../ui/primitives';
 
 interface LatLng {
   readonly lat: number;
@@ -52,19 +53,41 @@ export function MapPanel({ destination, origin }: Props) {
   const centre = destination ?? origin;
 
   if (Maps === undefined || centre === undefined) {
+    /**
+     * The coordinates-only fallback, styled as the design's MAP UNAVAILABLE
+     * card.
+     *
+     * react-native-maps renders blank in Expo Go on recent SDKs, so this is the
+     * path the demo will most likely take — which is why it is a designed
+     * surface rather than an apology. It says plainly that nothing about the
+     * dispatch depends on the map, because a blank rectangle where a map should
+     * be reads as the whole screen having failed.
+     */
     return (
       <View style={styles.fallback}>
-        <Text style={styles.fallbackTitle}>
-          {centre === undefined ? 'Waiting for location' : 'Map unavailable'}
-        </Text>
+        <Label>
+          {centre === undefined ? 'WAITING FOR LOCATION' : 'MAP UNAVAILABLE · COORDINATES ONLY'}
+        </Label>
+        {destination !== undefined ? (
+          <Text style={styles.fallbackName}>{destination.name}</Text>
+        ) : null}
         {centre !== undefined ? (
-          <Text style={type.mono}>
-            {centre.lat.toFixed(4)}, {centre.lng.toFixed(4)}
+          <Text style={styles.coords}>
+            {destination === undefined
+              ? `You: ${centre.lat.toFixed(4)}° N, ${centre.lng.toFixed(4)}° E`
+              : `${destination.lat.toFixed(4)}° N, ${destination.lng.toFixed(4)}° E`}
           </Text>
         ) : null}
-        {destination !== undefined ? (
-          <Text style={[type.small, { marginTop: spacing.xs }]}>{destination.name}</Text>
+        {origin !== undefined && destination !== undefined ? (
+          <Text style={styles.coords}>
+            {`You: ${origin.lat.toFixed(4)}° N, ${origin.lng.toFixed(4)}° E`}
+          </Text>
         ) : null}
+        <Text style={styles.fallbackNote}>
+          {centre === undefined
+            ? 'Location has not been shared, so no hospital can be matched. Everything else on this screen still works.'
+            : 'The map view failed to load. ETA, destination and Cancel Alert all still work — nothing about the dispatch depends on the map.'}
+        </Text>
       </View>
     );
   }
@@ -87,7 +110,7 @@ export function MapPanel({ destination, origin }: Props) {
           <Marker
             coordinate={{ latitude: origin.lat, longitude: origin.lng }}
             title="You"
-            pinColor={colors.primary}
+            pinColor={colors.brand}
           />
         ) : null}
         {destination !== undefined ? (
@@ -104,22 +127,23 @@ export function MapPanel({ destination, origin }: Props) {
 
 const styles = StyleSheet.create({
   mapWrap: {
-    height: 220,
-    borderRadius: radius.lg,
+    height: 186,
+    borderRadius: radius.xl,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.border,
+    borderColor: colors.hairline,
+    backgroundColor: '#e4ecf7',
   },
   fallback: {
-    height: 140,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(29,78,216,0.35)',
+    backgroundColor: colors.surfaceSoft,
+    padding: 18,
+    gap: 6,
   },
-  fallbackTitle: { ...type.h3, marginBottom: spacing.xs },
+  fallbackName: { fontFamily: fonts.sansSemi, fontSize: 15, color: colors.ink, marginTop: 4 },
+  coords: { fontFamily: fonts.monoMedium, fontSize: 12, lineHeight: 20, color: colors.inkSoft },
+  fallbackNote: { ...type.foot, marginTop: 2 },
 });

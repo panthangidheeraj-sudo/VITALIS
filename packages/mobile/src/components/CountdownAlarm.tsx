@@ -23,7 +23,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, Vibration } from 'react-native';
-import { colors, radius, spacing, type } from '../theme';
+import { colors, fonts, radius, spacing } from '../theme';
 
 interface Props {
   readonly title: string;
@@ -90,19 +90,72 @@ export function CountdownAlarm({ title, reason, seconds, onCancel, onElapsed }: 
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.danger, padding: spacing.lg, justifyContent: 'space-between' },
+  /**
+   * Deliberately NOT a glass card on the page wash.
+   *
+   * Every other surface in this app is soft and translucent. This one is a
+   * full-bleed flat red takeover with a 120px number on it, because it is the
+   * only screen that appears without the user asking and the only one where
+   * doing nothing has a consequence. It should not look like the rest of the
+   * app; it should look like an interruption.
+   */
+  screen: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: colors.danger,
+    padding: spacing.xxl,
+    justifyContent: 'space-between',
+    zIndex: 100,
+  },
   body: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: spacing.sm },
-  eyebrow: { color: '#FFFFFFCC', fontSize: 12, letterSpacing: 1.4, fontWeight: '700' },
-  title: { color: '#FFFFFF', fontSize: 30, fontWeight: '800', textAlign: 'center' },
-  reason: { color: '#FFFFFFDD', fontSize: 15, textAlign: 'center', marginBottom: spacing.lg },
-  count: { color: '#FFFFFF', fontSize: 120, fontWeight: '800', lineHeight: 128 },
-  countLabel: { color: '#FFFFFFDD', fontSize: 15, textAlign: 'center', paddingHorizontal: spacing.xl },
+  eyebrow: {
+    fontFamily: fonts.monoBold,
+    fontSize: 10,
+    letterSpacing: 1.6,
+    color: 'rgba(255,255,255,0.85)',
+  },
+  title: {
+    fontFamily: fonts.sansBlack,
+    fontSize: 30,
+    lineHeight: 34,
+    color: colors.white,
+    textAlign: 'center',
+    letterSpacing: -0.6,
+  },
+  reason: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    lineHeight: 21,
+    color: 'rgba(255,255,255,0.88)',
+    textAlign: 'center',
+    marginBottom: spacing.xl,
+  },
+  count: { fontFamily: fonts.sansBlack, fontSize: 120, lineHeight: 128, color: colors.white },
+  countLabel: {
+    fontFamily: fonts.sans,
+    fontSize: 14,
+    lineHeight: 20,
+    color: 'rgba(255,255,255,0.88)',
+    textAlign: 'center',
+    paddingHorizontal: spacing.xxl,
+  },
+  /** Enormous, and the only control on screen. Cancelling must be effortless. */
   cancel: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: radius.md,
-    paddingVertical: spacing.xl,
+    backgroundColor: colors.white,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.xxl,
     alignItems: 'center',
   },
-  cancelText: { color: colors.danger, fontSize: 22, fontWeight: '800' },
-  footnote: { ...type.tiny, color: '#FFFFFFAA', textAlign: 'center', marginTop: spacing.md },
+  cancelText: { fontFamily: fonts.sansBlack, fontSize: 22, color: colors.danger },
+  footnote: {
+    fontFamily: fonts.sans,
+    fontSize: 10.5,
+    lineHeight: 16,
+    color: 'rgba(255,255,255,0.7)',
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
 });

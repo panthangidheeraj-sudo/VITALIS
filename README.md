@@ -19,7 +19,7 @@ autonomously diagnoses or prescribes.
 | `packages/shared` — contracts, case-state model, tool ports, routing policy, schemas | **Done.** 81 tests passing. |
 | `packages/agent` — the Observe→Decide→Act→Evaluate→Adapt loop | **Done.** 39 tests passing. Runs end-to-end with zero API keys. |
 | `packages/server` — Express orchestrator, Firestore adapter, real tool adapters | **Done.** 216 tests passing. Every external port is now a real adapter except evidence normalisation: Groq (reasoning), Gemini (vision), MedlinePlus + Wikipedia (knowledge), RxNav (medication), WHO ICD-11 (coding), OpenStreetMap (hospitals), Twilio (notifications). |
-| `packages/mobile` — **React Native (Expo) app, Android + iOS** | **Done.** Typechecks clean and bundles for both platforms. Needs a phone + the running server to verify interactively. |
+| `packages/mobile` — **React Native (Expo) app, Android + iOS** | **Done.** Fifteen screens built to the Claude Design export in `design/`. Typechecks clean and bundles for both platforms. Needs a phone + the running server to verify interactively. |
 | `packages/web` — *superseded* | Holds only `.env` files. See "The web/mobile pivot" below. |
 
 **Platform decision:** the final deliverable is a React Native (Expo) mobile app,
@@ -35,6 +35,32 @@ npm run start -w @triage/mobile        # terminal 2: Expo, then scan the QR
 ```
 
 No API keys and no network access are required to typecheck or test.
+
+---
+
+## The UI
+
+The mobile app is built to a Claude Design file, kept in `design/` alongside a
+note on every place the implementation deliberately diverges from it. The short
+version, because these are the ones that matter:
+
+- **The design's screens are scripted; these are not.** Its `STEPS` array holds
+  four frozen snapshots — tier, confidence sentence, question, tool-call ledger
+  — advanced by a button. `packages/mobile/src/state/caseView.ts` is the seam
+  that replaced all of it with derivation from live `CaseState`. Same layout,
+  same voice, nothing hand-written.
+- **The ledger names the tool that actually ran.** The design's rows read
+  `infermedica /parse`; this system has never called Infermedica. A panel
+  captioned LIVE naming a vendor that did not run is a false provenance claim
+  on the one screen meant to be checkable, so it reads the real
+  `ToolCallRecord` stream.
+- **Four tiers, not three.** The design predates the `orange` tier.
+- **Glass is translucency, not blur.** `expo-blur` is the literal translation
+  and was rejected: eight blurred surfaces per screen drops frames on Android
+  in Expo Go, including on the screen holding the press-and-hold gate, where a
+  stutter reads as the hold not registering.
+- **Silent Distress renders outside the app shell** — wrapping a disguise in a
+  blue gradient and a tab bar labelled "Emergency" would defeat it entirely.
 
 ---
 

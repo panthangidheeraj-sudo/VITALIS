@@ -25,12 +25,26 @@ export function createApp({ tools, config, firestoreEnabled }: AppDeps): Express
   app.use(cors({ origin: config.nodeEnv === 'production' ? false : true }));
   app.use(express.json({ limit: '1mb' }));
 
+  /**
+   * Capability report, not just a liveness ping.
+   *
+   * The mobile app reads this to decide what to TELL THE USER is available —
+   * the injury-photo screen says "no vision model is enabled" or "photo reading
+   * is available" based on `visionEnabled`. Hardcoding that on the client is
+   * how a screen ends up claiming a working feature is broken, which trains
+   * people to ignore the message when it is real.
+   */
   app.get('/health', (_req, res) => {
     res.json({
       ok: true,
       firestoreEnabled,
       clinicalScorer:
         config.infermedica.enabled && !config.forceLocalScorer ? 'infermedica' : 'local_rules',
+      visionEnabled: config.gemini.enabled,
+      reasoningEnabled: config.groq.enabled,
+      // `enabled` is having credentials; `live` is being willing to use them.
+      // The app needs the second one — a dry-run send is not a send.
+      notificationsLive: config.twilio.enabled && config.twilio.live,
     });
   });
 
