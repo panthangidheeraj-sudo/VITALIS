@@ -20,8 +20,8 @@
 
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { DEMO_CONTACTS, DEMO_DEMOGRAPHICS, DEMO_EMERGENCY_CARD } from '../data/demoProfile';
-import { BackLink, Label } from '../ui/primitives';
-import { colors, fonts, glass, radius, shadow, spacing, type } from '../theme';
+import { BackLink, Glass, Label } from '../ui/primitives';
+import { colors, fonts, radius, shadow, spacing, type } from '../theme';
 
 export function EmergencyCardScreen({ onBack }: { readonly onBack: () => void }) {
   const card = DEMO_EMERGENCY_CARD;
@@ -35,7 +35,11 @@ export function EmergencyCardScreen({ onBack }: { readonly onBack: () => void })
         Stored on this device. Opens without a passcode or a signal.
       </Text>
 
-      <View style={[glass('strong'), styles.hero]}>
+      {/* Higher intensity than the app's usual glass, deliberately: this card
+          is read by a stranger, at arm's length, in bad light, and the
+          97-alpha frosted look the rest of the app uses trades a little too
+          much contrast for that job. */}
+      <Glass tone="strong" intensity={55} radius={radius.xxl} shadowLevel="lift" contentStyle={styles.hero}>
         <View style={styles.heroRow}>
           <View>
             <Label>BLOOD GROUP</Label>
@@ -56,9 +60,9 @@ export function EmergencyCardScreen({ onBack }: { readonly onBack: () => void })
             {card.allergies.length === 0 ? 'None known' : card.allergies.join('\n')}
           </Text>
         </View>
-      </View>
+      </Glass>
 
-      <View style={[glass('plain'), styles.card]}>
+      <Glass tone="plain" contentStyle={styles.card}>
         <Label>MEDICATIONS</Label>
         <Text style={styles.listText}>
           {card.medications.map((m) => m.reportedName).join('\n') || 'None'}
@@ -70,9 +74,9 @@ export function EmergencyCardScreen({ onBack }: { readonly onBack: () => void })
 
         <Label style={{ marginTop: 16 }}>CHRONIC CONDITIONS</Label>
         <Text style={styles.listText}>{card.chronicConditions.join(' · ') || 'None recorded'}</Text>
-      </View>
+      </Glass>
 
-      <View style={[glass('plain'), styles.contactCard]}>
+      <Glass tone="plain" contentStyle={styles.contactCard}>
         <Label style={{ paddingTop: 12, paddingBottom: 4 }}>EMERGENCY CONTACTS</Label>
         {DEMO_CONTACTS.map((contact) => (
           <View key={contact.phone} style={styles.contactRow}>
@@ -98,16 +102,16 @@ export function EmergencyCardScreen({ onBack }: { readonly onBack: () => void })
             </Pressable>
           </View>
         ))}
-      </View>
+      </Glass>
 
       {card.notes === undefined ? null : (
-        <View style={[glass('plain'), styles.card]}>
+        <Glass tone="plain" contentStyle={styles.card}>
           <Label>NOTES FOR RESPONDERS</Label>
           <Text style={styles.notes}>{card.notes}</Text>
           <Text style={[type.foot, { marginTop: 9 }]}>
             {`Updated ${new Date(card.updatedAt).toLocaleString()}`}
           </Text>
-        </View>
+        </Glass>
       )}
 
       {/* Said plainly rather than implied. A responder must not assume the

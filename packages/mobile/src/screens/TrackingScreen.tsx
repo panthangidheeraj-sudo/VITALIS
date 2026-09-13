@@ -30,13 +30,14 @@ import { isFirebaseConfigured } from '../firebase/client';
 import { clockTime } from '../state/caseView';
 import { MapPanel } from '../components/MapPanel';
 import {
+  Glass,
   DangerOutlineButton,
   Label,
   NoticeCard,
   Stat,
   TimelineStrip,
 } from '../ui/primitives';
-import { colors, dangerWash, fonts, glass, radius, shadow, spacing, type } from '../theme';
+import { colors, dangerWash, fonts, radius, shadow, spacing, type } from '../theme';
 
 interface Props {
   readonly caseId: CaseId;
@@ -114,7 +115,7 @@ export function TrackingScreen({ caseId, onCancelled, onOpenCompanion, onOpenHan
         <Stat label="STATUS" value={statusWord(dispatch?.status)} valueStyle={styles.statWord} />
       </View>
 
-      <View style={[glass('plain'), styles.card]}>
+      <Glass tone="plain" contentStyle={styles.card}>
         <Label>DESTINATION</Label>
         {match === undefined ? (
           <>
@@ -141,16 +142,16 @@ export function TrackingScreen({ caseId, onCancelled, onOpenCompanion, onOpenHan
             )}
           </>
         )}
-      </View>
+      </Glass>
 
-      <View style={[glass('plain'), styles.card, { paddingRight: 0 }]}>
+      <Glass tone="plain" contentStyle={[styles.card, { paddingRight: 0 }]}>
         <Label style={{ marginBottom: 10 }}>LIVE TIMELINE</Label>
         {timeline.length === 0 ? (
           <Text style={type.foot}>Waiting for the first event.</Text>
         ) : (
           <TimelineStrip entries={timeline} activeIndex={timeline.length - 1} />
         )}
-      </View>
+      </Glass>
 
       <View style={styles.linkRow}>
         <LinkCard title="Monitoring" sub="Trends and next check" onPress={onOpenCompanion} />
@@ -183,16 +184,18 @@ function LinkCard({
   readonly onPress: () => void;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        glass('blue'),
-        styles.linkCard,
-        pressed ? { transform: [{ scale: 0.96 }] } : null,
-      ]}
-    >
-      <Text style={[type.h3, { fontSize: 12.5 }]}>{title}</Text>
-      <Text style={[type.foot, { marginTop: 3 }]}>{sub}</Text>
+    <Pressable onPress={onPress}>
+      {({ pressed }) => (
+        <Glass
+          tone="blue"
+          radius={18}
+          style={[styles.linkCardFlex, pressed ? { transform: [{ scale: 0.96 }] } : null]}
+          contentStyle={styles.linkCard}
+        >
+          <Text style={[type.h3, { fontSize: 12.5 }]}>{title}</Text>
+          <Text style={[type.foot, { marginTop: 3 }]}>{sub}</Text>
+        </Glass>
+      )}
     </Pressable>
   );
 }
@@ -247,6 +250,7 @@ const styles = StyleSheet.create({
     borderTopColor: 'rgba(15,23,42,0.07)',
   },
   linkRow: { flexDirection: 'row', gap: spacing.md },
-  linkCard: { flex: 1, padding: 14, borderRadius: 18 },
+  linkCardFlex: { flex: 1 },
+  linkCard: { padding: 14 },
   cancelDock: { marginTop: spacing.xs },
 });

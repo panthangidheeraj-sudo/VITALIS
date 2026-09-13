@@ -1,6 +1,5 @@
 /**
- * The AI assistant — the design's `isAssistant` screen, and the only one with
- * no equivalent in the pre-design build.
+ * The AI assistant — the design's `isAssistant` screen.
  *
  * ---------------------------------------------------------------------------
  * THE ONE RULE THIS SCREEN EXISTS TO ENFORCE
@@ -26,14 +25,30 @@
  * and the opposite costs much more.
  * ---------------------------------------------------------------------------
  *
+ * NO CAMERA HERE, DELIBERATELY. A photo-attach affordance briefly lived in
+ * this composer and was removed: injury photography (§5.7, "AI Injury Scan")
+ * is scoped to an ACTIVE emergency case — the vision port describes what is
+ * visible and that becomes one more piece of evidence on a case record that
+ * does not exist yet on this screen. A camera icon here implied general
+ * photo-based diagnosis, which is exactly the capability this screen exists
+ * to refuse. The photo step lives inside the triage flow, on
+ * `PhotoInjuryScreen`, reached from `EmergencyScreen`.
+ *
+ * CHAT STATE LIVES IN A PROVIDER, NOT HERE. App.tsx unmounts every screen that
+ * is not the active one, so a `useState` in this component was wiped every
+ * time the user navigated away and back — see `state/assistantChat.tsx`.
+ *
  * There is no general-chat endpoint on the orchestrator yet, so the assistant
  * cannot answer freely. Rather than fake replies, an unrecognised message gets
  * an honest "I cannot answer general questions yet" and the triage route stays
  * one tap away. A fabricated health answer is the worst thing this file could
- * contain.
+ * contain. (Confirmed working-as-designed, not a bug — see the assistant
+ * chat's own status line: "General chat: not available · triage: available."
+ * Wiring it up is a separate, larger decision — see the PR discussion on
+ * scope before that gets built.)
  */
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -47,17 +62,8 @@ import {
 import { WaveField } from '../ui/WaveField';
 import { Label, PrimaryButton } from '../ui/primitives';
 import { Wordmark } from '../ui/Chrome';
+import { useAssistantChat } from '../state/assistantChat';
 import { colors, fonts, radius, shadow, spacing, type } from '../theme';
-
-interface Message {
-  readonly id: string;
-  readonly who: 'agent' | 'user';
-  readonly text: string;
-  /** Citation or routing note, shown in mono under the bubble. */
-  readonly meta?: string;
-  /** True on the message that hands off to triage. */
-  readonly handoff?: boolean;
-}
 
 /**
  * Words that end the conversation and start the interview.
@@ -104,75 +110,52 @@ function greetingReply(text: string): string | undefined {
   return 'Hi — ask me about a reading, a medication, or how you are feeling. If it sounds urgent I will move you to the triage interview instead.';
 }
 
-const OPENING: Message = {
-  id: 'opening',
-  who: 'agent',
-  text: 'Ask me anything about your health, your readings, or your medication. If what you describe sounds urgent I will stop and move you to the triage interview instead — that is deliberate.',
-};
-
 export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () => void }) {
-  const [messages, setMessages] = useState<readonly Message[]>([OPENING]);
-  const [draft, setDraft] = useState('');
-  const [handoffPending, setHandoffPending] = useState(false);
-  const [photoPrompted, setPhotoPrompted] = useState(false);
+  const { messages, setMessages, draft, setDraft, handoffPending, setHandoffPending } =
+    useAssistantChat();
   const scroller = useRef<ScrollView>(null);
+
+  // Land back where the conversation left off, not at the top, when this
+  // screen remounts after navigating away and back.
+  useEffect(() => {
+    if (messages.length > 1) {
+      requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: false }));
+    }
+    // Intentionally once on mount — this is a "restore scroll position," not
+    // a "follow new messages" effect; `send` already scrolls on its own.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const send = useCallback(() => {
     const text = draft.trim();
     if (text.length === 0) return;
     setDraft('');
 
-    const user: Message = { id: `u${Date.now()}`, who: 'user', text };
+    const user = { id: `u${Date.now()}`, who: 'user' as const, text };
     const escalate = needsTriage(text);
     const greeting = escalate ? undefined : greetingReply(text);
 
-    const reply: Message = escalate
+    const reply = escalate
       ? {
           id: `a${Date.now()}`,
-          who: 'agent',
+          who: 'agent' as const,
           handoff: true,
           text: 'I am going to stop the general conversation there. What you have described needs the triage interview, not a chat answer. It takes about a minute and I ask one thing at a time.',
           meta: 'You can cancel at any point · nothing is dispatched without you',
         }
       : greeting !== undefined
-        ? { id: `a${Date.now()}`, who: 'agent', text: greeting }
+        ? { id: `a${Date.now()}`, who: 'agent' as const, text: greeting }
         : {
             id: `a${Date.now()}`,
-            who: 'agent',
+            who: 'agent' as const,
             text: 'I cannot answer general health questions yet — the assistant is not wired to a knowledge endpoint in this build, and I would rather say so than make something up. If this is about symptoms you are having right now, start the triage interview and I can actually help.',
             meta: 'General chat: not available · triage: available',
           };
 
     setMessages((prev) => [...prev, user, reply]);
     setHandoffPending(escalate);
-    setPhotoPrompted(false);
     requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
-  }, [draft]);
-
-  /**
-   * The photo-attach affordance the chat itself was missing.
-   *
-   * A photo is always ONE MORE OBSERVATION ON A CASE (§5.7) — it has nowhere
-   * to attach to until a case exists, so this cannot capture a photo here
-   * without inventing a second, case-less photo path the rest of the system
-   * does not recognise. What it CAN do, and did not, is tell the user in the
-   * one place they were looking (the chat) that the photo lives one tap away
-   * inside triage, instead of leaving them to discover it by chance.
-   */
-  const promptPhoto = useCallback(() => {
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `a${Date.now()}`,
-        who: 'agent',
-        handoff: true,
-        text: 'A photo becomes part of your case record, so it is attached from inside the triage interview rather than here. Start triage and the photo step is right there — it is optional, and your risk tier never depends on it.',
-        meta: 'Tap below to go straight there',
-      },
-    ]);
-    setPhotoPrompted(true);
-    requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
-  }, []);
+  }, [draft, setDraft, setHandoffPending, setMessages]);
 
   const started = messages.length > 1;
 
@@ -224,11 +207,11 @@ export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () 
         ))}
 
         {/* The handoff is a button, not a link inside a sentence. Once the
-            assistant has said it is stopping, continuing to type — or tapping
-            past the photo prompt — must be the harder path. */}
-        {handoffPending || photoPrompted ? (
+            assistant has said it is stopping, continuing to type must be the
+            harder path. */}
+        {handoffPending ? (
           <PrimaryButton
-            label={photoPrompted && !handoffPending ? 'Start triage & add a photo' : 'Start emergency triage'}
+            label="Start emergency triage"
             onPress={onStartTriage}
             style={{ marginTop: spacing.lg }}
           />
@@ -236,16 +219,6 @@ export function AssistantScreen({ onStartTriage }: { readonly onStartTriage: () 
       </ScrollView>
 
       <View style={styles.composer}>
-        {/* The photo-attach entry point the chat itself was missing. It does
-            not capture anything here — see promptPhoto's comment for why —
-            it tells the user where the photo step actually lives. */}
-        <Pressable
-          onPress={promptPhoto}
-          hitSlop={8}
-          style={({ pressed }) => [styles.attachButton, pressed ? { opacity: 0.6 } : null]}
-        >
-          <Text style={styles.attachGlyph}>📷</Text>
-        </Pressable>
         <View style={styles.inputWrap}>
           <TextInput
             value={draft}
@@ -375,15 +348,4 @@ const styles = StyleSheet.create({
     ...shadow('lift'),
   },
   sendGlyph: { fontFamily: fonts.sansBold, fontSize: 18, color: colors.white },
-  attachButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.7)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.9)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  attachGlyph: { fontSize: 17 },
 });

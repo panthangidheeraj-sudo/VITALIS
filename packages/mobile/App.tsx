@@ -21,7 +21,15 @@
  */
 
 import { useEffect, useState } from 'react';
-import { SafeAreaView, StatusBar, StyleSheet } from 'react-native';
+import { StatusBar, StyleSheet } from 'react-native';
+// `SafeAreaView` from `react-native` itself is a no-op on Android — it only
+// applies inset padding on iOS, which is exactly why "Vitalis" sat flush
+// under the status bar on a real Android device while looking fine on an iOS
+// simulator. `react-native-safe-area-context`'s version measures real device
+// insets on both platforms. `SafeAreaProvider` has to wrap the whole tree
+// once, at the root, for `SafeAreaView` (and any future `useSafeAreaInsets`)
+// to have anything to read.
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import {
   PlusJakartaSans_400Regular,
@@ -61,6 +69,19 @@ import { startFallDetection } from './src/sensors/fallSensor';
 import { hydrateFirstAidCache } from './src/offline/firstAidStore';
 import { ensureSignedIn, isFirebaseConfigured } from './src/firebase/client';
 import { api } from './src/api/client';
+import { AssistantChatProvider } from './src/state/assistantChat';
+
+/**
+ * The assistant's first message. Lives here, not in AssistantScreen, because
+ * the provider that owns the conversation now lives here too — see
+ * `state/assistantChat.tsx` for why the chat had to move above the screen
+ * switch in the first place.
+ */
+const ASSISTANT_OPENING = {
+  id: 'opening',
+  who: 'agent' as const,
+  text: 'Ask me anything about your health, your readings, or your medication. If what you describe sounds urgent I will stop and move you to the triage interview instead — that is deliberate.',
+};
 
 type ScreenState =
   | { readonly name: 'home' }
@@ -88,7 +109,22 @@ type ScreenState =
  */
 const AUTO_ALERT_COUNTDOWN_SECONDS = 30;
 
+/**
+ * The actual root export, kept to a one-liner: wrap the whole screen switch in
+ * the assistant chat provider so navigating to and from the Assistant tab
+ * stops wiping the conversation, then render everything else unchanged.
+ */
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AssistantChatProvider opening={ASSISTANT_OPENING}>
+        <AppShell />
+      </AssistantChatProvider>
+    </SafeAreaProvider>
+  );
+}
+
+function AppShell() {
   const [screen, setScreen] = useState<ScreenState>({ name: 'home' });
   // App-level, not per-screen: changing it must never restart a case.
   const [language, setLanguage] = useState<Language>('en');

@@ -21,16 +21,81 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import {
   brandWash,
   colors,
   fonts,
   glass,
+  glassClip,
+  glassShadow,
+  glassTint,
   radius,
   shadow,
   spacing,
   type,
+  type GlassTone,
 } from '../theme';
+
+// ---------------------------------------------------------------------------
+// Glass — the real thing
+// ---------------------------------------------------------------------------
+
+/**
+ * A genuinely translucent, backdrop-blurred surface.
+ *
+ * THREE LAYERS, each doing one job `glass()` alone could not:
+ *   1. `glassShadow()` — the outer, unclipped View. Casts the drop shadow;
+ *      cannot also clip, or the shadow clips with it.
+ *   2. `<BlurView>` — the actual backdrop blur, `blurMethod="dimezisBlurView"`
+ *      on Android. That prop is what makes this safe to use as broadly as the
+ *      design asks for: the default Android blur backend is the one that
+ *      drops frames with many surfaces on screen at once, and the
+ *      dimezis-based one exists specifically to fix that without giving up
+ *      the blur. iOS's native blur was never the expensive one.
+ *   3. `glassTint(tone)` — a light colour wash over the blur, at a lower alpha
+ *      than the old flat `glass()` fill, because the blur now does the
+ *      softening the higher alpha used to fake.
+ *
+ * `intensity` defaults low (28 of a possible 100): enough to read as glass,
+ * not so much that a card over a busy background turns into a grey blob.
+ */
+export function Glass({
+  children,
+  tone = 'plain',
+  intensity = 28,
+  /** Overrides both layers' corner radius at once — pass whatever the card
+   * used to set on its own `glass()` style (a hero banner's `radius.xl`, a
+   * pill's `radius.pill`), or omit it for the standard card radius. */
+  radius: cornerRadius,
+  /** Matches `theme.shadow()`'s levels — pass `'lift'` for a hero banner. */
+  shadowLevel = 'card',
+  style,
+  contentStyle,
+}: {
+  readonly children: ReactNode;
+  readonly tone?: GlassTone;
+  readonly intensity?: number;
+  readonly radius?: number;
+  readonly shadowLevel?: 'card' | 'lift' | 'hero';
+  readonly style?: StyleProp<ViewStyle>;
+  readonly contentStyle?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <View style={[glassShadow(cornerRadius, shadowLevel), style]}>
+      <View style={glassClip(tone, cornerRadius)}>
+        <BlurView
+          intensity={intensity}
+          tint="light"
+          blurMethod="dimezisBlurView"
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={[StyleSheet.absoluteFill, glassTint(tone)]} />
+        <View style={contentStyle}>{children}</View>
+      </View>
+    </View>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Text
@@ -67,10 +132,14 @@ export function Card({
   style,
 }: {
   readonly children: ReactNode;
-  readonly tone?: 'plain' | 'blue' | 'strong';
+  readonly tone?: GlassTone;
   readonly style?: StyleProp<ViewStyle>;
 }) {
-  return <View style={[glass(tone), styles.cardPad, style]}>{children}</View>;
+  return (
+    <Glass tone={tone} style={style} contentStyle={styles.cardPad}>
+      {children}
+    </Glass>
+  );
 }
 
 /**
@@ -297,13 +366,13 @@ export function Stat({
   readonly valueStyle?: StyleProp<TextStyle>;
 }) {
   return (
-    <View style={[glass('blue'), styles.statCard, style]}>
+    <Glass tone="blue" style={[styles.statFlex, style]} contentStyle={styles.statCard}>
       <Label>{label}</Label>
       <Text style={[type.metric, styles.statValue, valueStyle]}>
         {value}
         {unit === undefined ? null : <Text style={styles.statUnit}>{unit}</Text>}
       </Text>
-    </View>
+    </Glass>
   );
 }
 
@@ -444,7 +513,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   pillLabel: { fontFamily: fonts.sansSemi, fontSize: 12.5 },
-  statCard: { padding: 14, borderRadius: 18, flex: 1 },
+  statFlex: { flex: 1 },
+  statCard: { padding: 14 },
   statValue: { marginTop: 9, fontSize: 22, lineHeight: 24 },
   statUnit: { fontFamily: fonts.sans, fontSize: 12, color: colors.slate },
   stripContent: { gap: spacing.md, paddingRight: spacing.xl },

@@ -12,8 +12,8 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useVitals, type VitalsReading } from '../data/vitalsStore';
-import { Label, PrimaryButton, SecondaryButton } from '../ui/primitives';
-import { colors, fonts, glass, radius, spacing, type } from '../theme';
+import { Glass, Label, PrimaryButton, SecondaryButton } from '../ui/primitives';
+import { colors, fonts, radius, spacing, type } from '../theme';
 
 export function VitalsPanel() {
   const { vitals, loading, save } = useVitals();
@@ -73,7 +73,7 @@ export function VitalsPanel() {
       </Text>
 
       {editing ? (
-        <View style={[glass('blue'), styles.editCard]}>
+        <Glass tone="blue" contentStyle={styles.editCard}>
           <View style={styles.row}>
             <Field label="BP SYSTOLIC" value={draft.bpSys} onChange={(v) => setDraft((d) => ({ ...d, bpSys: v }))} />
             <Field label="BP DIASTOLIC" value={draft.bpDia} onChange={(v) => setDraft((d) => ({ ...d, bpDia: v }))} />
@@ -87,14 +87,14 @@ export function VitalsPanel() {
             <SecondaryButton label="Cancel" onPress={() => setEditing(false)} style={{ flex: 1 }} />
             <PrimaryButton label="Save" onPress={submit} style={{ flex: 1 }} />
           </View>
-        </View>
+        </Glass>
       ) : !hasAnyReading ? (
-        <View style={[glass('blue'), styles.emptyCard]}>
-          <Text style={type.body}>No readings logged yet.</Text>
-          <Text style={[type.foot, { marginTop: 4 }]}>
-            Tap "Log a reading" to enter a blood pressure, pulse, SpO₂ or glucose value by hand.
-          </Text>
-        </View>
+        // Minimal on purpose (P2 #6): an empty state is not an occasion for a
+        // full card explaining itself in two sentences. One tappable line.
+        <Pressable onPress={() => setEditing(true)} style={styles.emptyRow} hitSlop={6}>
+          <Text style={styles.emptyPlus}>＋</Text>
+          <Text style={styles.emptyLabel}>Add a reading</Text>
+        </Pressable>
       ) : (
         <View style={styles.grid}>
           {vitals.bpSys !== undefined ? (
@@ -141,13 +141,13 @@ function Field({
 
 function Tile({ label, value, unit }: { readonly label: string; readonly value: string; readonly unit: string }) {
   return (
-    <View style={[glass('blue'), styles.tile]}>
+    <Glass tone="blue" style={styles.tileFlex} contentStyle={styles.tile}>
       <Label style={{ marginBottom: 8 }}>{label}</Label>
       <Text style={type.metric}>
         {value}
         <Text style={styles.unit}>{` ${unit}`}</Text>
       </Text>
-    </View>
+    </Glass>
   );
 }
 
@@ -164,10 +164,13 @@ const styles = StyleSheet.create({
   sectionHead: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   editLink: { fontFamily: fonts.sansBold, fontSize: 12.5, color: colors.brand },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  tile: { width: '48%', flexGrow: 1, padding: 14, borderRadius: radius.lg },
+  tileFlex: { width: '48%', flexGrow: 1 },
+  tile: { padding: 14 },
   unit: { fontFamily: fonts.sans, fontSize: 13, color: colors.slate },
-  emptyCard: { padding: spacing.xl, borderRadius: radius.lg },
-  editCard: { padding: spacing.xl, borderRadius: radius.lg, gap: spacing.md },
+  emptyRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6 },
+  emptyPlus: { fontFamily: fonts.sansBold, fontSize: 15, color: colors.brand },
+  emptyLabel: { fontFamily: fonts.sansSemi, fontSize: 13, color: colors.brand },
+  editCard: { padding: spacing.xl, gap: spacing.md },
   row: { flexDirection: 'row', gap: spacing.md },
   field: { flex: 1 },
   fieldFull: { flex: 1 },

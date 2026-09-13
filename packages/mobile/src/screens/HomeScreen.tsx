@@ -20,9 +20,10 @@ import { api } from '../api/client';
 import { DEMO_DEMOGRAPHICS, DEMO_EMERGENCY_CARD } from '../data/demoProfile';
 import { useAuth } from '../firebase/useAuth';
 import { VitalsPanel } from '../components/VitalsPanel';
+import { MedicationsPanel } from '../components/MedicationsPanel';
 import { Wordmark } from '../ui/Chrome';
-import { Card, Label, NoticeCard, PrimaryButton } from '../ui/primitives';
-import { colors, fonts, glass, radius, spacing, type } from '../theme';
+import { Card, Glass, Label, NoticeCard, PrimaryButton } from '../ui/primitives';
+import { colors, fonts, radius, spacing, type } from '../theme';
 
 interface Props {
   readonly onStartEmergency: () => void;
@@ -33,11 +34,6 @@ interface Props {
   readonly onOpenMedicine: () => void;
   readonly onOpenSilent: () => void;
 }
-
-const REMINDERS = [
-  { name: 'Metformin 500 mg', at: '8:00 AM', state: 'TAKEN' as const },
-  { name: 'Amlodipine 5 mg', at: '9:00 PM', state: 'DUE' as const },
-];
 
 export function HomeScreen({
   onStartEmergency,
@@ -125,27 +121,7 @@ export function HomeScreen({
 
       <VitalsPanel />
 
-      <View>
-        <Text style={[type.h3, { marginBottom: 9 }]}>Medication reminders</Text>
-        <View style={[glass('blue'), styles.reminderCard]}>
-          {REMINDERS.map((reminder, i) => (
-            <View key={reminder.name} style={[styles.reminderRow, i > 0 ? styles.rowDivider : null]}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.reminderName}>{reminder.name}</Text>
-                <Text style={[type.small, { marginTop: 2 }]}>{reminder.at}</Text>
-              </View>
-              <Text
-                style={[
-                  styles.reminderState,
-                  { color: reminder.state === 'TAKEN' ? colors.ok : colors.warn },
-                ]}
-              >
-                {reminder.state}
-              </Text>
-            </View>
-          ))}
-        </View>
-      </View>
+      <MedicationsPanel />
 
       {/* The quick actions. The design shows two; this adds the QR card, the
           medicine scanner and silent distress, which exist in this build and
@@ -153,16 +129,29 @@ export function HomeScreen({
           because none of them is somewhere you go — they are things you reach
           for once. */}
       <View style={styles.grid}>
-        <QuickAction title="Emergency card" sub="Blood group, allergies, contacts" onPress={onOpenEmergencyCard} />
-        <QuickAction title="Lock-screen QR" sub="Scannable by a responder" onPress={onOpenQr} />
-        <QuickAction title="Medicine scanner" sub="Expiry, dose, what it is" onPress={onOpenMedicine} />
+        {/* Hierarchy (P2 #7): the two cards a responder — or the user under
+            duress — reaches for FIRST get an icon, a coloured accent bar and a
+            bolder title. The other four are equally functional, just quieter,
+            because treating six unrelated actions as equally urgent is itself
+            what "no hierarchy" looks like. */}
         <QuickAction
+          icon="🩸"
+          title="Emergency card"
+          sub="Blood group, allergies, contacts"
+          emphasis
+          onPress={onOpenEmergencyCard}
+        />
+        <QuickAction
+          icon="🔇"
           title="Silent distress"
-          sub="Disguises as a calculator and shares your location — for when you can't be seen calling for help"
+          sub="Disguises as a calculator, shares your location"
+          emphasis
           onPress={onOpenSilent}
         />
-        <QuickAction title="First aid" sub="Works with no signal" onPress={onOpenFirstAid} />
-        <QuickAction title="Language" sub="English · हिन्दी · తెలుగు · தமிழ்" onPress={onOpenLanguage} />
+        <QuickAction icon="◱" title="Lock-screen QR" sub="Scannable by a responder" onPress={onOpenQr} />
+        <QuickAction icon="💊" title="Medicine scanner" sub="Expiry, dose, what it is" onPress={onOpenMedicine} />
+        <QuickAction icon="🩹" title="First aid" sub="Works with no signal" onPress={onOpenFirstAid} />
+        <QuickAction icon="🌐" title="Language" sub="English · हिन्दी · తెలుగు · தமிழ்" onPress={onOpenLanguage} />
       </View>
 
       {/* Google sign-in. Framed as what it is FOR, never as "sign in to
@@ -205,25 +194,34 @@ export function HomeScreen({
 }
 
 function QuickAction({
+  icon,
   title,
   sub,
+  emphasis = false,
   onPress,
 }: {
+  readonly icon: string;
   readonly title: string;
   readonly sub: string;
+  /** The two highest-priority cards — see the call site's comment. */
+  readonly emphasis?: boolean;
   readonly onPress: () => void;
 }) {
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        glass('blue'),
-        styles.quick,
-        pressed ? { transform: [{ scale: 0.96 }] } : null,
-      ]}
-    >
-      <Text style={type.h3}>{title}</Text>
-      <Text style={[type.foot, { marginTop: 4 }]}>{sub}</Text>
+    <Pressable onPress={onPress}>
+      {({ pressed }) => (
+        <Glass
+          tone={emphasis ? 'strong' : 'blue'}
+          style={[styles.quickFlex, emphasis ? styles.quickEmphasisBorder : null, pressed ? { transform: [{ scale: 0.96 }] } : null]}
+          contentStyle={styles.quick}
+        >
+          <View style={[styles.quickIcon, emphasis ? styles.quickIconEmphasis : null]}>
+            <Text style={styles.quickIconGlyph}>{icon}</Text>
+          </View>
+          <Text style={[type.h3, emphasis ? styles.quickTitleEmphasis : null]}>{title}</Text>
+          <Text style={[type.foot, { marginTop: 4 }]}>{sub}</Text>
+        </Glass>
+      )}
     </Pressable>
   );
 }
@@ -267,13 +265,21 @@ const styles = StyleSheet.create({
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
 
-  reminderCard: { paddingHorizontal: spacing.xl, paddingVertical: 5, borderRadius: radius.lg },
-  reminderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: 14 },
-  rowDivider: { borderTopWidth: 1, borderTopColor: colors.divider },
-  reminderName: { fontFamily: fonts.sansSemi, fontSize: 13, color: colors.ink },
-  reminderState: { fontFamily: fonts.monoBold, fontSize: 10, letterSpacing: 0.6 },
-
-  quick: { width: '48%', flexGrow: 1, padding: spacing.xl, borderRadius: radius.lg },
+  quickFlex: { width: '48%', flexGrow: 1 },
+  quickEmphasisBorder: { borderColor: 'rgba(220,38,38,0.28)', borderWidth: 1.5, borderRadius: radius.lg },
+  quick: { padding: spacing.xl },
+  quickIcon: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(29,78,216,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 9,
+  },
+  quickIconEmphasis: { backgroundColor: 'rgba(220,38,38,0.12)' },
+  quickIconGlyph: { fontSize: 15 },
+  quickTitleEmphasis: { color: colors.dangerDeep },
 
   signedIn: {
     flexDirection: 'row',

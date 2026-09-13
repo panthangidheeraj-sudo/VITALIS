@@ -41,6 +41,7 @@ import { buildCaseView } from '../state/caseView';
 import {
   Card,
   ConfidenceBars,
+  Glass,
   Label,
   LedgerPanel,
   NoticeCard,
@@ -329,14 +330,18 @@ export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto }: 
         />
       </View>
 
-      <Pressable onPress={() => onPhoto(caseId)} style={({ pressed }) => [glass('blue'), styles.photoRow, pressed ? { opacity: 0.7 } : null]}>
-        <View style={{ flex: 1 }}>
-          <Text style={type.h3}>Add a photo of the injury</Text>
-          <Text style={[type.foot, { marginTop: 3 }]}>
-            Optional. One more observation — never a shortcut past the interview.
-          </Text>
-        </View>
-        <Text style={styles.chevron}>›</Text>
+      <Pressable onPress={() => onPhoto(caseId)}>
+        {({ pressed }) => (
+          <Glass tone="blue" style={pressed ? { opacity: 0.7 } : null} contentStyle={styles.photoRow}>
+            <View style={{ flex: 1 }}>
+              <Text style={type.h3}>Add a photo of the injury</Text>
+              <Text style={[type.foot, { marginTop: 3 }]}>
+                Optional. One more observation — never a shortcut past the interview.
+              </Text>
+            </View>
+            <Text style={styles.chevron}>›</Text>
+          </Glass>
+        )}
       </Pressable>
 
       {/* The ledger. Real rows from Firestore, so "LIVE" is a checkable claim. */}

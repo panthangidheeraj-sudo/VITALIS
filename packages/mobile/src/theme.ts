@@ -227,14 +227,17 @@ export function shadow(level: 'card' | 'lift' | 'hero'): ViewStyle {
   }) as ViewStyle;
 }
 
+export type GlassTone = 'plain' | 'blue' | 'strong';
+
 /**
- * The standard glass surface: translucent fill, brighter hairline, soft shadow.
- *
- * `tone` maps onto the three fills the design actually uses. Anything outside
- * these three was a one-off in the design and is written inline at its call
- * site rather than smuggled in here as a fourth option nobody can name.
+ * The standard glass surface, kept for the handful of places that genuinely
+ * cannot host a native `<BlurView>` (a `transform`-animated card in the
+ * first-aid stack, a `Pressable`'s style function). Everywhere else, use the
+ * `<Glass>` component from `ui/primitives.tsx` instead — this alone cannot
+ * produce a backdrop blur, because that is not a style property in React
+ * Native, only an actual layered native view can do it.
  */
-export function glass(tone: 'plain' | 'blue' | 'strong' = 'plain'): ViewStyle {
+export function glass(tone: GlassTone = 'plain'): ViewStyle {
   return {
     backgroundColor:
       tone === 'blue' ? colors.surfaceBlue : tone === 'strong' ? colors.surfaceStrong : colors.surface,
@@ -242,6 +245,50 @@ export function glass(tone: 'plain' | 'blue' | 'strong' = 'plain'): ViewStyle {
     borderColor: tone === 'blue' ? colors.hairlineSoft : colors.hairline,
     borderRadius: radius.lg,
     ...shadow('card'),
+  };
+}
+
+/**
+ * The outer, unclipped shell — carries the shadow only.
+ *
+ * Split from the border/fill deliberately: iOS shadows require
+ * `overflow: 'visible'` on the element that casts them, while the blur
+ * beneath needs `overflow: 'hidden'` to respect the rounded corners. One View
+ * cannot be both, so `<Glass>` nests a clipped inner view inside this one.
+ */
+export function glassShadow(
+  cornerRadius: number = radius.lg,
+  level: 'card' | 'lift' | 'hero' = 'card',
+): ViewStyle {
+  return { borderRadius: cornerRadius, ...shadow(level) };
+}
+
+/** The clipped shell: border, radius, and the overflow that crops the blur. */
+export function glassClip(tone: GlassTone = 'plain', cornerRadius: number = radius.lg): ViewStyle {
+  return {
+    borderRadius: cornerRadius,
+    borderWidth: 1,
+    borderColor: tone === 'blue' ? colors.hairlineSoft : colors.hairline,
+    overflow: 'hidden',
+  };
+}
+
+/**
+ * The tint layered over the blur.
+ *
+ * Deliberately a LOWER alpha than the flat `glass()` fill — real blur now
+ * supplies the softening that the higher alpha used to fake, and a tint this
+ * light is what keeps content behind the card actually readable through it,
+ * which is the entire point of asking for glassmorphism over a flat card.
+ */
+export function glassTint(tone: GlassTone = 'plain'): ViewStyle {
+  return {
+    backgroundColor:
+      tone === 'blue'
+        ? 'rgba(219,234,254,0.28)'
+        : tone === 'strong'
+          ? 'rgba(255,255,255,0.38)'
+          : 'rgba(255,255,255,0.30)',
   };
 }
 

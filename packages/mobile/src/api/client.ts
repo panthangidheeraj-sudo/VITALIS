@@ -17,7 +17,22 @@
 
 import type { BiologicalSex, CaseId, Language, RiskTier, RoutingDecision } from '@triage/shared';
 
-const BASE_URL = process.env['EXPO_PUBLIC_API_URL'] ?? 'http://localhost:8787';
+/**
+ * MUST be dot-notation, `process.env.EXPO_PUBLIC_API_URL` — not
+ * `process.env['EXPO_PUBLIC_API_URL']`.
+ *
+ * Expo's Metro env-var inlining only rewrites the literal dot-access form; it
+ * does not statically evaluate a computed/bracket member expression, even one
+ * with a string-literal key, and explicitly documents bracket access as
+ * unsupported. A bracket read here ships to the device bundle as literally
+ * `process.env['EXPO_PUBLIC_API_URL']` — `process.env` on a released RN
+ * bundle has no keys at all — so it evaluates to `undefined` on every real
+ * device, and this always fell through to the localhost fallback below no
+ * matter what `.env` said. That is a materially different bug from "reads the
+ * wrong URL": it means the URL a physical device actually used was NEVER
+ * configurable, on Home or Emergency alike, in any release build.
+ */
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8787';
 
 /** Server responses are summaries; full state arrives over the Firestore listener. */
 export interface CaseSummary {

@@ -33,13 +33,19 @@ import { getAuth, initializeAuth, signInAnonymously, type Auth } from 'firebase/
 import { getReactNativePersistence } from '@firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
+// Dot-notation only — see the matching comment in src/api/client.ts. Bracket
+// access here specifically means `isFirebaseConfigured()` was false on every
+// physical device, so the live Firestore listener never activated and every
+// screen silently ran on POST-response state alone rather than the shared
+// live view. That is not a cosmetic miss; it is the feature the demo's whole
+// "live update on a second device" story depends on.
 const firebaseConfig = {
-  apiKey: process.env['EXPO_PUBLIC_FIREBASE_API_KEY'],
-  authDomain: process.env['EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN'],
-  projectId: process.env['EXPO_PUBLIC_FIREBASE_PROJECT_ID'],
-  storageBucket: process.env['EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET'],
-  messagingSenderId: process.env['EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID'],
-  appId: process.env['EXPO_PUBLIC_FIREBASE_APP_ID'],
+  apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
 export function isFirebaseConfigured(): boolean {

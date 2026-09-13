@@ -55,10 +55,14 @@ const DISCOVERY = {
  * identify the app, they do not authorise anything on their own.
  */
 function clientId(): string | undefined {
+  // Dot-notation only — see src/api/client.ts. Bracket access meant this
+  // always returned undefined on device, so `isGoogleSignInConfigured()` was
+  // always false and the sign-in card on Home never rendered — not because
+  // no client id was ever set, but because none could ever be read.
   return (
-    process.env['EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID'] ??
-    process.env['EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS'] ??
-    process.env['EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB']
+    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID ??
+    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS ??
+    process.env.EXPO_PUBLIC_GOOGLE_CLIENT_ID_WEB
   );
 }
 

@@ -26,8 +26,8 @@ import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { DEMO_CONTACTS, DEMO_DEMOGRAPHICS, DEMO_EMERGENCY_CARD } from '../data/demoProfile';
-import { colors, fonts, glass, radius, shadow, spacing, type } from '../theme';
-import { BackLink, Label, NoticeCard } from '../ui/primitives';
+import { colors, fonts, radius, shadow, spacing, type } from '../theme';
+import { BackLink, Glass, Label, NoticeCard } from '../ui/primitives';
 
 /**
  * Kept compact on purpose. QR density rises fast with payload length, and a
@@ -103,17 +103,17 @@ export function EmergencyQrScreen({ onBack }: { readonly onBack: () => void }) {
 
       {/* Always rendered, never only inside the QR: a responder with a cracked
           camera, or no phone at all, still needs to read this. */}
-      <View style={[glass('blue'), styles.card]}>
+      <Glass tone="blue" contentStyle={styles.card}>
         <Label>WHAT THE CODE CONTAINS</Label>
         <Text style={styles.payload}>{payload}</Text>
-      </View>
+      </Glass>
 
-      <View style={[glass('plain'), styles.card]}>
+      <Glass tone="plain" contentStyle={styles.card}>
         <Text style={type.h3}>Reaching this from the lock screen</Text>
         <Text style={[type.small, { marginTop: 8 }]}>
           {`Add these details to your phone's own Medical ID (iOS Health, or Android emergency information) so responders can reach them without unlocking. This app cannot place a widget on the lock screen while it runs through Expo Go.`}
         </Text>
-      </View>
+      </Glass>
 
       <NoticeCard accent={colors.warn} background={colors.warnWash} border="rgba(217,119,6,0.35)">
         <Label color={colors.warnDeep}>THIS SCREEN IS NOT PRIVATE</Label>

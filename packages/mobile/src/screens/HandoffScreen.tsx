@@ -31,8 +31,8 @@ import { useCaseState } from '../firebase/useCaseState';
 import { isFirebaseConfigured } from '../firebase/client';
 import { DEMO_DEMOGRAPHICS, DEMO_EMERGENCY_CARD } from '../data/demoProfile';
 import { clockTime } from '../state/caseView';
-import { BackLink, Label, NoticeCard, Stat, TimelineStrip } from '../ui/primitives';
-import { colors, fonts, glass, radius, shadow, spacing, tierColor, tierLabel, type } from '../theme';
+import { BackLink, Glass, Label, NoticeCard, Stat, TimelineStrip } from '../ui/primitives';
+import { colors, fonts, radius, shadow, spacing, tierColor, tierLabel, type } from '../theme';
 
 interface Props {
   readonly caseId: CaseId;
@@ -101,7 +101,7 @@ export function HandoffScreen({ caseId, onBack }: Props) {
         </NoticeCard>
       ) : null}
 
-      <View style={[glass('blue'), styles.card]}>
+      <Glass tone="blue" contentStyle={styles.card}>
         <Label>CHIEF COMPLAINT</Label>
         <Text style={styles.chief}>{chiefComplaint(state)}</Text>
         <Text style={[type.small, { marginTop: 3 }]}>
@@ -112,10 +112,10 @@ export function HandoffScreen({ caseId, onBack }: Props) {
           {' · ICD-11 '}
           <Text style={styles.code}>not yet coded</Text>
         </Text>
-      </View>
+      </Glass>
 
       {/* Verbatim. Never paraphrased, never tidied, never translated (§7). */}
-      <View style={[glass('blue'), styles.card]}>
+      <Glass tone="blue" contentStyle={styles.card}>
         <Label style={{ marginBottom: 11 }}>{`PATIENT'S OWN WORDS · VERBATIM`}</Label>
         {quotes.length === 0 ? (
           <Text style={type.small}>No free-text statements recorded.</Text>
@@ -132,9 +132,9 @@ export function HandoffScreen({ caseId, onBack }: Props) {
         <Text style={[type.foot, { marginTop: 4 }]}>
           {`Language: ${state.language.toUpperCase()} · never paraphrased or cleaned up.`}
         </Text>
-      </View>
+      </Glass>
 
-      <View style={[glass('blue'), styles.card]}>
+      <Glass tone="blue" contentStyle={styles.card}>
         <Label>ALLERGIES</Label>
         <Text style={styles.allergies}>
           {DEMO_EMERGENCY_CARD.allergies.join(' · ') || 'None reported'}
@@ -155,7 +155,7 @@ export function HandoffScreen({ caseId, onBack }: Props) {
         <Text style={styles.meds}>
           {DEMO_EMERGENCY_CARD.chronicConditions.join(' · ') || 'None reported'}
         </Text>
-      </View>
+      </Glass>
 
       {unresolved.length > 0 ? (
         <NoticeCard accent={colors.warn} background={colors.warnWash} border="rgba(217,119,6,0.32)">
@@ -171,16 +171,18 @@ export function HandoffScreen({ caseId, onBack }: Props) {
         </NoticeCard>
       ) : null}
 
-      <View style={[glass('blue'), styles.card, { paddingRight: 0 }]}>
+      <Glass tone="blue" contentStyle={[styles.card, { paddingRight: 0 }]}>
         <Label style={{ marginBottom: 11 }}>CASE TIMELINE</Label>
         {timeline.length === 0 ? (
           <Text style={type.small}>No entries yet.</Text>
         ) : (
           <TimelineStrip entries={timeline} activeIndex={timeline.length - 1} />
         )}
-      </View>
+      </Glass>
 
-      {/* The provenance panel. Reads the engine that ACTUALLY ran. */}
+      {/* The provenance panel. Reads the engine that ACTUALLY ran. Kept solid
+          and dark, not glass — it is a terminal/log surface by design (see
+          `ui/primitives.tsx`'s LedgerPanel), and a frosted log reads wrong. */}
       <View style={styles.sourcePanel}>
         <Label color={colors.ledgerDim}>SCORING SOURCE</Label>
         <Text style={styles.sourceText}>

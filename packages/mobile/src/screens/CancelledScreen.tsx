@@ -20,8 +20,8 @@
  */
 
 import { StyleSheet, Text, View } from 'react-native';
-import { Label, PrimaryButton, SecondaryButton } from '../ui/primitives';
-import { colors, fonts, glass, radius, shadow, spacing, type } from '../theme';
+import { Glass, Label, PrimaryButton, SecondaryButton } from '../ui/primitives';
+import { colors, fonts, radius, shadow, spacing, type } from '../theme';
 
 export function CancelledScreen({
   onReopen,
@@ -37,7 +37,7 @@ export function CancelledScreen({
     <View style={styles.root}>
       <View style={styles.spacer} />
 
-      <View style={[glass('strong'), styles.hero]}>
+      <Glass tone="strong" radius={radius.xxl} shadowLevel="lift" contentStyle={styles.hero}>
         <View style={styles.tick}>
           <Text style={styles.tickGlyph}>✓</Text>
         </View>
@@ -51,16 +51,16 @@ export function CancelledScreen({
           Calling and standing down is the system working as intended. Do it again the moment you
           are unsure.
         </Text>
-      </View>
+      </Glass>
 
-      <View style={[glass('plain'), styles.card]}>
+      <Glass tone="plain" contentStyle={styles.card}>
         <Label>YOUR CASE IS SAVED</Label>
         <Text style={[type.body, { color: colors.inkSoft, marginTop: 9 }]}>
           The interview, the tier changes and the timeline are all kept. If this comes back today,
           reopening the case is faster than starting again — and the agent already knows what you
           told it.
         </Text>
-      </View>
+      </Glass>
 
       <PrimaryButton label="Start a new assessment" onPress={onReopen} />
       <SecondaryButton label="Back to home" onPress={onHome} />

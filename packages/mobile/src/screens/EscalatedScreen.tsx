@@ -27,8 +27,8 @@ import { useCaseState } from '../firebase/useCaseState';
 import { isFirebaseConfigured } from '../firebase/client';
 import { clockTime } from '../state/caseView';
 import { DEMO_CONTACTS } from '../data/demoProfile';
-import { BackLink, DangerOutlineButton, Label } from '../ui/primitives';
-import { colors, escalateWash, fonts, glass, radius, shadow, spacing, type } from '../theme';
+import { BackLink, DangerOutlineButton, Glass, Label } from '../ui/primitives';
+import { colors, escalateWash, fonts, radius, shadow, spacing, type } from '../theme';
 
 interface Props {
   readonly caseId: CaseId;
@@ -78,7 +78,7 @@ export function EscalatedScreen({ caseId, onBack, onRequestAmbulance }: Props) {
         <Text style={styles.heroBody}>{reason}</Text>
       </LinearGradient>
 
-      <View style={[glass('blue'), styles.card]}>
+      <Glass tone="blue" contentStyle={styles.card}>
         <Label>WHAT HAPPENS NOW</Label>
         <View style={styles.steps}>
           <Step
@@ -97,9 +97,9 @@ export function EscalatedScreen({ caseId, onBack, onRequestAmbulance }: Props) {
           />
           <Step n={3} text="I keep monitoring you in the meantime. Nothing is paused." />
         </View>
-      </View>
+      </Glass>
 
-      <View style={[glass('blue'), styles.card]}>
+      <Glass tone="blue" contentStyle={styles.card}>
         <Label>IF IT GETS WORSE BEFORE THEY CALL</Label>
         <Text style={[type.body, { color: colors.inkSoft, marginTop: 9 }]}>
           Do not wait for the call. Ambulance dispatch is still available to you right now.
@@ -109,7 +109,7 @@ export function EscalatedScreen({ caseId, onBack, onRequestAmbulance }: Props) {
           onPress={onRequestAmbulance}
           style={{ marginTop: 13 }}
         />
-      </View>
+      </Glass>
 
       <Text style={styles.footnote}>
         Escalation is one of six fixed outcomes. It is not an error and it is not a dead end.

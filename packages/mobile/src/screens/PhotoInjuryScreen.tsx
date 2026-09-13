@@ -25,8 +25,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { api } from '../api/client';
-import { BackLink, Label, NoticeCard, PrimaryButton, SecondaryButton } from '../ui/primitives';
-import { colors, fonts, glass, radius, spacing, type } from '../theme';
+import { BackLink, Glass, Label, NoticeCard, PrimaryButton, SecondaryButton } from '../ui/primitives';
+import { colors, fonts, radius, spacing, type } from '../theme';
 
 interface Props {
   readonly onBack: () => void;
@@ -109,14 +109,14 @@ export function PhotoInjuryScreen({ onBack, onSubmit }: Props) {
         )}
       </View>
 
-      <View style={[glass('blue'), styles.card]}>
+      <Glass tone="blue" contentStyle={styles.card}>
         <Label>BEFORE YOU TAKE IT</Label>
         <Text style={[type.body, { color: colors.inkSoft, marginTop: 9 }]}>
           The photo is attached to this case only, and travels with your handoff card to the
           receiving hospital. The agent describes what is visible — bleeding, swelling, burns. It
           never names a condition and it cannot set your risk level.
         </Text>
-      </View>
+      </Glass>
 
       {visionLive === false ? (
         <NoticeCard accent={colors.warn} background={colors.warnWash} border="rgba(217,119,6,0.35)">

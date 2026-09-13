@@ -24,8 +24,8 @@
 
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { Language } from '@triage/shared';
-import { BackLink } from '../ui/primitives';
-import { colors, fonts, glass, radius, spacing, type } from '../theme';
+import { BackLink, Glass } from '../ui/primitives';
+import { colors, fonts, radius, spacing, type } from '../theme';
 
 interface Props {
   readonly current: Language;
@@ -59,26 +59,42 @@ export function LanguageScreen({ current, onSelect, onBack }: Props) {
         {LANGUAGES.map((language) => {
           const selected = language.code === current;
           return (
-            <Pressable
-              key={language.code}
-              onPress={() => onSelect(language.code)}
-              style={({ pressed }) => [
-                selected ? styles.rowSelected : [glass('plain'), styles.row],
-                pressed ? { transform: [{ scale: 0.98 }] } : null,
-              ]}
-            >
-              <View style={{ flex: 1 }}>
-                {/* Generous line-height: Devanagari, Telugu and Tamil all have
-                    ascenders and descenders that English does not, and a tight
-                    box clips them on Android. */}
-                <Text style={styles.native}>{language.native}</Text>
-                <Text style={[type.small, { marginTop: 2, fontSize: 11 }]}>{language.english}</Text>
-              </View>
-              {selected ? (
-                <View style={styles.check}>
-                  <Text style={styles.checkGlyph}>✓</Text>
-                </View>
-              ) : null}
+            <Pressable key={language.code} onPress={() => onSelect(language.code)}>
+              {({ pressed }) => {
+                const body = (
+                  <>
+                    <View style={{ flex: 1 }}>
+                      {/* Generous line-height: Devanagari, Telugu and Tamil all
+                          have ascenders and descenders that English does not,
+                          and a tight box clips them on Android. */}
+                      <Text style={styles.native}>{language.native}</Text>
+                      <Text style={[type.small, { marginTop: 2, fontSize: 11 }]}>{language.english}</Text>
+                    </View>
+                    {selected ? (
+                      <View style={styles.check}>
+                        <Text style={styles.checkGlyph}>✓</Text>
+                      </View>
+                    ) : null}
+                  </>
+                );
+                // Selected stays a solid tinted card, deliberately: the one
+                // row that most needs to read clearly at a glance is the one
+                // already chosen, and a frosted background is the wrong place
+                // to spend contrast.
+                return selected ? (
+                  <View style={[styles.rowSelected, pressed ? { transform: [{ scale: 0.98 }] } : null]}>
+                    {body}
+                  </View>
+                ) : (
+                  <Glass
+                    tone="plain"
+                    style={pressed ? { transform: [{ scale: 0.98 }] } : null}
+                    contentStyle={styles.row}
+                  >
+                    {body}
+                  </Glass>
+                );
+              }}
             </Pressable>
           );
         })}

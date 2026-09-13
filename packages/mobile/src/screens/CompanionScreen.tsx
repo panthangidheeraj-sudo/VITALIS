@@ -24,8 +24,8 @@ import { useCaseState } from '../firebase/useCaseState';
 import { isFirebaseConfigured } from '../firebase/client';
 import { clockTime } from '../state/caseView';
 import { DEMO_CONTACTS } from '../data/demoProfile';
-import { BackLink, Label } from '../ui/primitives';
-import { colors, dangerWash, fonts, glass, radius, shadow, spacing, tierColor, tierLabel, type } from '../theme';
+import { BackLink, Glass, Label } from '../ui/primitives';
+import { colors, dangerWash, fonts, radius, shadow, spacing, tierColor, tierLabel, type } from '../theme';
 
 interface Props {
   readonly caseId: CaseId;
@@ -92,7 +92,7 @@ export function CompanionScreen({ caseId, onOpenFirstAid, onBack }: Props) {
       </LinearGradient>
 
       <View style={styles.row}>
-        <View style={[glass('strong'), styles.bigStat, { flex: 1.2 }]}>
+        <Glass tone="strong" style={{ flex: 1.2 }} contentStyle={styles.bigStat}>
           <Label>CHECKS DONE</Label>
           <Text style={styles.bigNumber}>{companion?.reassessmentCount ?? 0}</Text>
           <Text style={[type.foot, { marginTop: 4 }]}>
@@ -100,8 +100,8 @@ export function CompanionScreen({ caseId, onOpenFirstAid, onBack }: Props) {
               ? 'none yet'
               : `last ${clockTime(companion.lastReassessedAt)}`}
           </Text>
-        </View>
-        <View style={[glass('strong'), styles.bigStat, { flex: 1 }]}>
+        </Glass>
+        <Glass tone="strong" style={{ flex: 1 }} contentStyle={styles.bigStat}>
           <Label>NEXT CHECK</Label>
           <Text style={styles.countdown}>
             {secondsLeft === undefined
@@ -111,10 +111,10 @@ export function CompanionScreen({ caseId, onOpenFirstAid, onBack }: Props) {
           <Text style={[type.foot, { marginTop: 6 }]}>
             {nextDue === undefined ? 'not scheduled' : `due ${clockTime(nextDue)}`}
           </Text>
-        </View>
+        </Glass>
       </View>
 
-      <View style={[glass('blue'), styles.card]}>
+      <Glass tone="blue" contentStyle={styles.card}>
         <Label style={{ marginBottom: 6 }}>DIRECTION OF TRAVEL</Label>
         {trends.map((trend) => {
           const shown = trend.value === undefined ? NOT_ASSESSED : TREND_STYLE[trend.value] ?? NOT_ASSESSED;
@@ -128,7 +128,7 @@ export function CompanionScreen({ caseId, onOpenFirstAid, onBack }: Props) {
         <Text style={[type.foot, { marginTop: 10 }]}>
           {`Direction matters more than a single reading. “No worse” and “getting worse” need different responses.`}
         </Text>
-      </View>
+      </Glass>
 
       <Pressable
         onPress={onOpenFirstAid}
@@ -143,7 +143,7 @@ export function CompanionScreen({ caseId, onOpenFirstAid, onBack }: Props) {
         </Text>
       </Pressable>
 
-      <View style={[glass('blue'), styles.card]}>
+      <Glass tone="blue" contentStyle={styles.card}>
         <Label>RECEIVING YOUR LIVE LOCATION</Label>
         {state === undefined || state.notifications.length === 0 ? (
           <Text style={[type.small, { marginTop: 10 }]}>
@@ -169,7 +169,7 @@ export function CompanionScreen({ caseId, onOpenFirstAid, onBack }: Props) {
             </View>
           ))
         )}
-      </View>
+      </Glass>
     </View>
   );
 }
