@@ -50,6 +50,7 @@ import {
   PrimaryButton,
   BackLink,
 } from '../ui/primitives';
+import { Breathe, FadeUp } from '../ui/motion';
 import { colors, fonts, glass, radius, shadow, spacing, tierColor, tierLabel, type } from '../theme';
 
 interface Props {
@@ -224,33 +225,35 @@ export function EmergencyScreen({ onDispatched, onEscalated, onBack, onPhoto, op
     >
       <BackLink onPress={onBack} />
 
-      <View style={styles.headline}>
+      <FadeUp style={styles.headline}>
         <Text style={type.h1}>{view.title}</Text>
         <Text style={[type.body, { marginTop: 5 }]}>{view.subtitle}</Text>
-      </View>
+      </FadeUp>
 
       {/* The two axes, stacked in one card and visibly separate — the tier is
           coloured and the confidence is grey, so they can never be read as the
           same measurement (spec §5.1). */}
-      <View style={styles.tierCard}>
-        <View style={[styles.tierHead, { backgroundColor: tierColor[tier] }]}>
-          <View style={{ flex: 1 }}>
-            <Label color="rgba(255,255,255,0.82)">RISK · CLINICAL ENGINE</Label>
-            <Text style={styles.tierLabel}>{tierLabel[tier]}</Text>
+      <FadeUp delayMs={90}>
+        <Breathe periodMs={5000} style={styles.tierCard}>
+          <View style={[styles.tierHead, { backgroundColor: tierColor[tier] }]}>
+            <View style={{ flex: 1 }}>
+              <Label color="rgba(255,255,255,0.82)">RISK · CLINICAL ENGINE</Label>
+              <Text style={styles.tierLabel}>{tierLabel[tier]}</Text>
+            </View>
+            <Text style={styles.tierOutcome}>{view.outcomeLines}</Text>
           </View>
-          <Text style={styles.tierOutcome}>{view.outcomeLines}</Text>
-        </View>
-        <View style={styles.tierBody}>
-          <View style={styles.confRow}>
-            <Label>CONFIDENCE · SEPARATE AXIS</Label>
-            <Text style={styles.confLabel}>{view.confidenceLabel}</Text>
+          <View style={styles.tierBody}>
+            <View style={styles.confRow}>
+              <Label>CONFIDENCE · SEPARATE AXIS</Label>
+              <Text style={styles.confLabel}>{view.confidenceLabel}</Text>
+            </View>
+            <ConfidenceBars filled={view.confidenceBars} />
+            <Text style={[type.small, { color: colors.inkSoft, marginTop: 10 }]}>
+              {view.confidenceSentence}
+            </Text>
           </View>
-          <ConfidenceBars filled={view.confidenceBars} />
-          <Text style={[type.small, { color: colors.inkSoft, marginTop: 10 }]}>
-            {view.confidenceSentence}
-          </Text>
-        </View>
-      </View>
+        </Breathe>
+      </FadeUp>
 
       {/* §6: degradation is stated, never implied. The sentence is the one the
           case state carries, not a hardcoded vendor name. */}

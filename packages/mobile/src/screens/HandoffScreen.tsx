@@ -32,6 +32,7 @@ import { isFirebaseConfigured } from '../firebase/client';
 import { useProfile } from '../data/profileStore';
 import { clockTime } from '../state/caseView';
 import { BackLink, Glass, Label, NoticeCard, Stat, TimelineStrip } from '../ui/primitives';
+import { PopIn } from '../ui/motion';
 import { colors, fonts, radius, shadow, spacing, tierColor, tierLabel, type } from '../theme';
 
 interface Props {
@@ -67,20 +68,22 @@ export function HandoffScreen({ caseId, onBack }: Props) {
     <View style={styles.root}>
       <BackLink label="Tracking" onPress={onBack} />
 
-      <LinearGradient
-        colors={[tierColor[derived.riskTier], shade(tierColor[derived.riskTier])]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.hero}
-      >
-        <Label color="rgba(255,255,255,0.8)">CLINICAL HANDOFF</Label>
-        <Text style={styles.heroTitle}>{tierLabel[derived.riskTier]}</Text>
-        <Text style={styles.heroSub}>
-          {`${derived.triageLevel.replace(/_/g, ' ')} · ${profile.displayName.trim().length > 0 ? profile.displayName : 'Patient'}, ${
-            state.demographics.ageYears
-          }, ${state.demographics.sex}`}
-        </Text>
-      </LinearGradient>
+      <PopIn>
+        <LinearGradient
+          colors={[tierColor[derived.riskTier], shade(tierColor[derived.riskTier])]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.hero}
+        >
+          <Label color="rgba(255,255,255,0.8)">CLINICAL HANDOFF</Label>
+          <Text style={styles.heroTitle}>{tierLabel[derived.riskTier]}</Text>
+          <Text style={styles.heroSub}>
+            {`${derived.triageLevel.replace(/_/g, ' ')} · ${profile.displayName.trim().length > 0 ? profile.displayName : 'Patient'}, ${
+              state.demographics.ageYears
+            }, ${state.demographics.sex}`}
+          </Text>
+        </LinearGradient>
+      </PopIn>
 
       <View style={styles.statRow}>
         <Stat label="SEVERITY" value={derived.severityOutOfTen} unit="/10" />

@@ -20,6 +20,7 @@
 import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useProfile } from '../data/profileStore';
 import { BackLink, Glass, Label, PrimaryButton } from '../ui/primitives';
+import { PopIn } from '../ui/motion';
 import { colors, fonts, radius, shadow, spacing, type } from '../theme';
 
 export function EmergencyCardScreen({
@@ -59,28 +60,30 @@ export function EmergencyCardScreen({
           is read by a stranger, at arm's length, in bad light, and the
           97-alpha frosted look the rest of the app uses trades a little too
           much contrast for that job. */}
-      <Glass tone="strong" intensity={55} radius={radius.xxl} shadowLevel="lift" contentStyle={styles.hero}>
-        <View style={styles.heroRow}>
-          <View>
-            <Label>BLOOD GROUP</Label>
-            <Text style={styles.bloodGroup}>{profile.bloodGroup || '—'}</Text>
+      <PopIn>
+        <Glass tone="strong" intensity={55} radius={radius.xxl} shadowLevel="lift" contentStyle={styles.hero}>
+          <View style={styles.heroRow}>
+            <View>
+              <Label>BLOOD GROUP</Label>
+              <Text style={styles.bloodGroup}>{profile.bloodGroup || '—'}</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end' }}>
+              <Text style={styles.name}>{profile.displayName}</Text>
+              <Text style={[type.small, { marginTop: 2 }]}>
+                {`${profile.ageYears} · ${profile.sex}`}
+              </Text>
+              {profile.organDonor ? <Text style={styles.donor}>ORGAN DONOR</Text> : null}
+            </View>
           </View>
-          <View style={{ alignItems: 'flex-end' }}>
-            <Text style={styles.name}>{profile.displayName}</Text>
-            <Text style={[type.small, { marginTop: 2 }]}>
-              {`${profile.ageYears} · ${profile.sex}`}
-            </Text>
-            {profile.organDonor ? <Text style={styles.donor}>ORGAN DONOR</Text> : null}
-          </View>
-        </View>
 
-        <View style={styles.allergyBlock}>
-          <Label>ALLERGIES</Label>
-          <Text style={styles.allergies}>
-            {profile.allergies.length === 0 ? 'None known' : profile.allergies.join('\n')}
-          </Text>
-        </View>
-      </Glass>
+          <View style={styles.allergyBlock}>
+            <Label>ALLERGIES</Label>
+            <Text style={styles.allergies}>
+              {profile.allergies.length === 0 ? 'None known' : profile.allergies.join('\n')}
+            </Text>
+          </View>
+        </Glass>
+      </PopIn>
 
       <Glass tone="plain" contentStyle={styles.card}>
         <Label>MEDICATIONS</Label>

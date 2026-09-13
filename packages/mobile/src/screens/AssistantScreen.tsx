@@ -63,6 +63,7 @@ import type { CaseId } from '@triage/shared';
 import { WaveField } from '../ui/WaveField';
 import { HoldDial } from '../components/HoldDial';
 import { Label, PrimaryButton } from '../ui/primitives';
+import { Pulse } from '../ui/motion';
 import { Wordmark } from '../ui/Chrome';
 import { useAssistantChat } from '../state/assistantChat';
 import { api, ApiError, type TurnResponse } from '../api/client';
@@ -296,7 +297,7 @@ export function AssistantScreen({
             <View style={styles.orbOuter}>
               <View style={styles.orbRing} />
               <View style={styles.orbCore}>
-                <View style={styles.orbDot} />
+                <Pulse periodMs={2600} style={styles.orbDot} />
               </View>
             </View>
             <Label style={{ marginTop: 10, letterSpacing: 1.7 }}>VITALIS AI ASSISTANT</Label>

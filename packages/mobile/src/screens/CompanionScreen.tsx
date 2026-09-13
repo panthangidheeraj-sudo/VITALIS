@@ -25,6 +25,7 @@ import { isFirebaseConfigured } from '../firebase/client';
 import { clockTime } from '../state/caseView';
 import { useProfile } from '../data/profileStore';
 import { BackLink, Glass, Label } from '../ui/primitives';
+import { Pulse } from '../ui/motion';
 import { colors, dangerWash, fonts, radius, shadow, spacing, tierColor, tierLabel, type } from '../theme';
 
 interface Props {
@@ -79,7 +80,11 @@ export function CompanionScreen({ caseId, onOpenFirstAid, onBack }: Props) {
         style={styles.hero}
       >
         <View style={styles.heroTop}>
-          <View style={styles.pulse} />
+          {companion?.active === true ? (
+            <Pulse periodMs={1800} style={styles.pulse} />
+          ) : (
+            <View style={[styles.pulse, { opacity: 0.4 }]} />
+          )}
           <Label color="rgba(255,255,255,0.85)">
             {companion?.active === true ? 'STILL MONITORING' : 'MONITORING NOT ACTIVE'}
           </Label>

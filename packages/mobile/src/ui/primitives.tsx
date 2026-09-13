@@ -36,6 +36,7 @@ import {
   type,
   type GlassTone,
 } from '../theme';
+import { Breathe, GrowBarX } from './motion';
 
 // ---------------------------------------------------------------------------
 // Glass — the real thing
@@ -352,6 +353,13 @@ export function Pill({
 // ---------------------------------------------------------------------------
 
 /** A `LABEL` / `value` stack. The most repeated shape in the whole design. */
+/**
+ * A stat tile breathes gently while on screen (`vbreathe 4.2s`) — the design's
+ * treatment for the ETA/STATUS/UNIT row on Tracking and its counterparts
+ * elsewhere. Applied consistently to every `<Stat>` rather than one-off per
+ * screen, so the whole app reads as one theme rather than an instance that
+ * happened to get animated.
+ */
 export function Stat({
   label,
   value,
@@ -366,13 +374,15 @@ export function Stat({
   readonly valueStyle?: StyleProp<TextStyle>;
 }) {
   return (
-    <Glass tone="blue" style={[styles.statFlex, style]} contentStyle={styles.statCard}>
-      <Label>{label}</Label>
-      <Text style={[type.metric, styles.statValue, valueStyle]}>
-        {value}
-        {unit === undefined ? null : <Text style={styles.statUnit}>{unit}</Text>}
-      </Text>
-    </Glass>
+    <Breathe periodMs={4200} style={[styles.statFlex, style]}>
+      <Glass tone="blue" contentStyle={styles.statCard}>
+        <Label>{label}</Label>
+        <Text style={[type.metric, styles.statValue, valueStyle]}>
+          {value}
+          {unit === undefined ? null : <Text style={styles.statUnit}>{unit}</Text>}
+        </Text>
+      </Glass>
+    </Breathe>
   );
 }
 
@@ -458,25 +468,33 @@ export function LedgerPanel({
   );
 }
 
-/** Five bars. Confidence, deliberately drawn in greys — never in tier colour. */
+/**
+ * Five bars. Confidence, deliberately drawn in greys — never in tier colour.
+ *
+ * Each bar grows in from the left on mount/change (`vgrowx .6s ease-out`,
+ * staggered like the design's own `.2s`/`.25s`/... offsets) rather than
+ * appearing filled instantly — the same "confidence is accumulating"
+ * motion the design uses on its meter bars.
+ */
 export function ConfidenceBars({ filled }: { readonly filled: number }) {
   return (
     <View style={styles.bars}>
       {[0, 1, 2, 3, 4].map((i) => (
-        <View
-          key={i}
-          style={[
-            styles.bar,
-            {
-              backgroundColor:
-                i < filled
-                  ? filled <= 2
-                    ? colors.ink
-                    : colors.inkSoft
-                  : 'rgba(15,23,42,0.12)',
-            },
-          ]}
-        />
+        <GrowBarX key={`${filled}-${i}`} delayMs={80 + i * 40} style={styles.barWrap}>
+          <View
+            style={[
+              styles.bar,
+              {
+                backgroundColor:
+                  i < filled
+                    ? filled <= 2
+                      ? colors.ink
+                      : colors.inkSoft
+                    : 'rgba(15,23,42,0.12)',
+              },
+            ]}
+          />
+        </GrowBarX>
       ))}
     </View>
   );
@@ -533,5 +551,6 @@ const styles = StyleSheet.create({
   ledgerMs: { fontFamily: fonts.mono, fontSize: 10.5, color: colors.ledgerMs },
   ledgerEmpty: { fontFamily: fonts.mono, fontSize: 10.5, color: 'rgba(255,255,255,0.5)' },
   bars: { flexDirection: 'row', gap: 4 },
-  bar: { flex: 1, height: 6, borderRadius: radius.pill },
+  barWrap: { flex: 1 },
+  bar: { width: '100%', height: 6, borderRadius: radius.pill },
 });

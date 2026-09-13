@@ -33,6 +33,7 @@ import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '../api/client';
 import { BackLink, Glass, Label, NoticeCard, PrimaryButton, SecondaryButton } from '../ui/primitives';
+import { PopIn } from '../ui/motion';
 import { colors, fonts, radius, spacing, type } from '../theme';
 
 interface Props {
@@ -119,7 +120,7 @@ export function PhotoInjuryScreen({ onBack, onSubmit }: Props) {
         and your risk tier does not depend on it.
       </Text>
 
-      <View style={styles.viewfinder}>
+      <PopIn delayMs={80} style={styles.viewfinder}>
         {status.kind === 'sending' ? (
           <>
             <ActivityIndicator color={colors.brand} />
@@ -137,7 +138,7 @@ export function PhotoInjuryScreen({ onBack, onSubmit }: Props) {
             <Text style={styles.viewfinderHint}>No photo taken yet</Text>
           </>
         )}
-      </View>
+      </PopIn>
 
       <Glass tone="blue" contentStyle={styles.card}>
         <Label>BEFORE YOU TAKE IT</Label>

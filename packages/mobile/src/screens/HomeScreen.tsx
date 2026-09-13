@@ -23,6 +23,7 @@ import { VitalsPanel } from '../components/VitalsPanel';
 import { MedicationsPanel } from '../components/MedicationsPanel';
 import { Wordmark } from '../ui/Chrome';
 import { Card, Glass, Label, NoticeCard, PrimaryButton } from '../ui/primitives';
+import { FadeUp, Pulse } from '../ui/motion';
 import { colors, fonts, radius, spacing, type } from '../theme';
 
 interface Props {
@@ -76,7 +77,7 @@ export function HomeScreen({
     <View style={styles.root}>
       <Wordmark />
 
-      <View style={styles.greetRow}>
+      <FadeUp style={styles.greetRow}>
         <View style={{ flex: 1 }}>
           <Label style={{ marginBottom: 7 }}>{today()}</Label>
           <Text style={type.serifDisplay}>
@@ -86,7 +87,7 @@ export function HomeScreen({
         <Pressable onPress={onOpenProfile} style={styles.avatar}>
           <Text style={styles.avatarText}>{initials}</Text>
         </Pressable>
-      </View>
+      </FadeUp>
 
       {/* Connection state. The unreachable case names the actual cause, because
           `localhost` on a phone meaning "the phone" is the mistake that costs
@@ -104,7 +105,11 @@ export function HomeScreen({
         </NoticeCard>
       ) : (
         <View style={styles.connected}>
-          <View style={[styles.dot, { backgroundColor: reachable === undefined ? colors.faint : colors.ok }]} />
+          {reachable === true ? (
+            <Pulse periodMs={2400} style={[styles.dot, { backgroundColor: colors.ok }]} />
+          ) : (
+            <View style={[styles.dot, { backgroundColor: colors.faint }]} />
+          )}
           <Text style={[styles.connLabel, reachable === undefined ? { color: colors.slate } : null]}>
             {reachable === undefined ? 'Checking…' : 'Connected'}
           </Text>
@@ -132,6 +137,7 @@ export function HomeScreen({
             because treating five unrelated actions as equally urgent is itself
             what "no hierarchy" looks like. */}
         <QuickAction
+          index={0}
           icon="🩸"
           title="Emergency card"
           sub="Blood group, allergies, contacts"
@@ -139,15 +145,16 @@ export function HomeScreen({
           onPress={onOpenEmergencyCard}
         />
         <QuickAction
+          index={1}
           icon="👤"
           title="Profile"
           sub="Your details and emergency contacts"
           emphasis
           onPress={onOpenProfile}
         />
-        <QuickAction icon="💊" title="Medicine scanner" sub="Expiry, dose, what it is" onPress={onOpenMedicine} />
-        <QuickAction icon="🩹" title="First aid" sub="Works with no signal" onPress={onOpenFirstAid} />
-        <QuickAction icon="🌐" title="Language" sub="English · हिन्दी · తెలుగు · தமிழ்" onPress={onOpenLanguage} />
+        <QuickAction index={2} icon="💊" title="Medicine scanner" sub="Expiry, dose, what it is" onPress={onOpenMedicine} />
+        <QuickAction index={3} icon="🩹" title="First aid" sub="Works with no signal" onPress={onOpenFirstAid} />
+        <QuickAction index={4} icon="🌐" title="Language" sub="English · हिन्दी · తెలుగు · தமிழ்" onPress={onOpenLanguage} />
       </View>
 
       {/* Google sign-in. Framed as what it is FOR, never as "sign in to
@@ -196,6 +203,7 @@ function QuickAction({
   title,
   sub,
   emphasis = false,
+  index,
   onPress,
 }: {
   readonly icon: string;
@@ -203,24 +211,28 @@ function QuickAction({
   readonly sub: string;
   /** The two highest-priority cards — see the call site's comment. */
   readonly emphasis?: boolean;
+  /** Staggers this tile's entrance — `vfadeup ... .2s/.25s/... both` in the design. */
+  readonly index: number;
   readonly onPress: () => void;
 }) {
   return (
-    <Pressable onPress={onPress}>
-      {({ pressed }) => (
-        <Glass
-          tone={emphasis ? 'strong' : 'blue'}
-          style={[styles.quickFlex, emphasis ? styles.quickEmphasisBorder : null, pressed ? { transform: [{ scale: 0.96 }] } : null]}
-          contentStyle={styles.quick}
-        >
-          <View style={[styles.quickIcon, emphasis ? styles.quickIconEmphasis : null]}>
-            <Text style={styles.quickIconGlyph}>{icon}</Text>
-          </View>
-          <Text style={[type.h3, emphasis ? styles.quickTitleEmphasis : null]}>{title}</Text>
-          <Text style={[type.foot, { marginTop: 4 }]}>{sub}</Text>
-        </Glass>
-      )}
-    </Pressable>
+    <FadeUp delayMs={200 + index * 40} style={styles.quickFlex}>
+      <Pressable onPress={onPress}>
+        {({ pressed }) => (
+          <Glass
+            tone={emphasis ? 'strong' : 'blue'}
+            style={[emphasis ? styles.quickEmphasisBorder : null, pressed ? { transform: [{ scale: 0.96 }] } : null]}
+            contentStyle={styles.quick}
+          >
+            <View style={[styles.quickIcon, emphasis ? styles.quickIconEmphasis : null]}>
+              <Text style={styles.quickIconGlyph}>{icon}</Text>
+            </View>
+            <Text style={[type.h3, emphasis ? styles.quickTitleEmphasis : null]}>{title}</Text>
+            <Text style={[type.foot, { marginTop: 4 }]}>{sub}</Text>
+          </Glass>
+        )}
+      </Pressable>
+    </FadeUp>
   );
 }
 

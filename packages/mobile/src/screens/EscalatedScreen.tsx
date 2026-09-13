@@ -28,6 +28,7 @@ import { isFirebaseConfigured } from '../firebase/client';
 import { clockTime } from '../state/caseView';
 import { useProfile } from '../data/profileStore';
 import { BackLink, DangerOutlineButton, Glass, Label } from '../ui/primitives';
+import { PopIn } from '../ui/motion';
 import { colors, escalateWash, fonts, radius, shadow, spacing, type } from '../theme';
 
 interface Props {
@@ -68,16 +69,18 @@ export function EscalatedScreen({ caseId, onBack, onRequestAmbulance }: Props) {
     <View style={styles.root}>
       <BackLink label="Emergency" onPress={onBack} />
 
-      <LinearGradient
-        colors={escalateWash.colors}
-        start={escalateWash.start}
-        end={escalateWash.end}
-        style={styles.hero}
-      >
-        <Label color="rgba(255,255,255,0.8)">OUTCOME 6 OF 6 · DELIBERATE</Label>
-        <Text style={styles.heroTitle}>{'A human is taking\nover from here'}</Text>
-        <Text style={styles.heroBody}>{reason}</Text>
-      </LinearGradient>
+      <PopIn>
+        <LinearGradient
+          colors={escalateWash.colors}
+          start={escalateWash.start}
+          end={escalateWash.end}
+          style={styles.hero}
+        >
+          <Label color="rgba(255,255,255,0.8)">OUTCOME 6 OF 6 · DELIBERATE</Label>
+          <Text style={styles.heroTitle}>{'A human is taking\nover from here'}</Text>
+          <Text style={styles.heroBody}>{reason}</Text>
+        </LinearGradient>
+      </PopIn>
 
       <Glass tone="blue" contentStyle={styles.card}>
         <Label>WHAT HAPPENS NOW</Label>
