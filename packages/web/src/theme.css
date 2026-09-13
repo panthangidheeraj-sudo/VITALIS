@@ -637,6 +637,181 @@ textarea {
   text-align: left;
 }
 
+/* --- Wave field (Assistant background) --------------------------------------- */
+
+.wave-field {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wave-band {
+  position: absolute;
+  top: 0;
+  left: 0;
+  animation: wave-drift linear infinite;
+  will-change: transform;
+}
+
+@keyframes wave-drift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--wave-shift));
+  }
+}
+
+/* --- Ambient background glow -------------------------------------------------
+   A single slow opacity/scale breathe on one decorative layer — cheap
+   (transform + opacity only, one element, GPU-composited) rather than
+   animating gradient positions, which forces a repaint every frame. */
+
+/* Deliberately a small, fixed-SIZE layer (not `inset: 0`) positioned near the
+   top of the viewport, rather than a full-screen element — animating
+   transform/opacity on something covering the entire viewport forces the
+   browser to keep that whole compositing layer "active" continuously, which
+   is exactly the unnecessary cost the brief warns against. This is one
+   ~560×420px layer. */
+.bg-glow {
+  position: fixed;
+  top: -80px;
+  left: 50%;
+  width: 560px;
+  height: 420px;
+  margin-left: -280px;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(50% 50% at 50% 50%, rgba(23, 105, 232, 0.18), transparent 70%);
+  animation: bg-breathe 9s ease-in-out infinite;
+  will-change: transform, opacity;
+}
+
+@keyframes bg-breathe {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+}
+
+/* --- Loading spinner (busy buttons) -------------------------------------------- */
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --- Hover / focus micro-interactions ------------------------------------------
+   `:active` (press feedback) already existed; hover and focus-visible are new
+   here specifically because a browser has both a pointer AND a keyboard, which
+   the mobile app this was ported from never had to account for. */
+
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 14px 30px rgba(23, 105, 232, 0.36);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: rgba(23, 105, 232, 0.16);
+  }
+  .pill:hover:not(.selected) {
+    background: rgba(255, 255, 255, 0.85);
+  }
+  .feature-tile:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 14px 34px rgba(16, 42, 84, 0.14);
+  }
+  .nav-item:hover:not(.active) {
+    color: var(--primary);
+  }
+  .add-pill:hover {
+    background: rgba(23, 105, 232, 0.2);
+  }
+  .call-banner:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 12px 28px rgba(139, 26, 38, 0.28);
+  }
+}
+
+.btn,
+.pill,
+.feature-tile,
+.nav-item,
+.add-pill,
+.call-banner {
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease, color 0.18s ease;
+}
+
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* --- Reduced motion -------------------------------------------------------------
+   Every non-essential animation in this file, disabled/shortened to near-zero
+   when the user has asked the OS for less motion. Layout, color, glass and
+   typography are all untouched — only movement is affected. */
+@media (prefers-reduced-motion: reduce) {
+  .fade-up,
+  .dot-pulse,
+  .wave-band,
+  .bg-glow,
+  .spinner,
+  .card-pop {
+    animation: none !important;
+  }
+  .fade-up {
+    opacity: 1;
+    transform: none;
+  }
+  .btn,
+  .pill,
+  .feature-tile,
+  .nav-item,
+  .add-pill,
+  .call-banner,
+  .stack-card {
+    transition: none !important;
+  }
+}
+
+@keyframes card-pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.card-pop {
+  animation: card-pop 0.22s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .step-badge {
   width: 28px;
   height: 28px;

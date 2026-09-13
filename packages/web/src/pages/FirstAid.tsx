@@ -18,7 +18,7 @@ export function FirstAid() {
   const active = FIRST_AID_TOPICS[index];
 
   return (
-    <div className="page">
+    <div className="page fade-up">
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <div style={{ width: 40, height: 40, borderRadius: 20, background: 'rgba(255,255,255,0.58)', border: '1px solid rgba(255,255,255,0.82)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 14px rgba(16,42,84,0.1)' }}>
           <GearIcon />
@@ -57,7 +57,10 @@ export function FirstAid() {
         <div className="stack-back" style={{ top: 16, left: '7%', width: '86%', height: 308, background: 'rgba(228,241,255,0.46)', zIndex: 0 }} />
         <div className="stack-back" style={{ top: 8, left: '4%', width: '92%', height: 320, background: 'rgba(222,237,255,0.58)', zIndex: 1 }} />
         {active !== undefined ? (
-          <div className="stack-card" style={{ zIndex: 10 }}>
+          // `key={active.id}` forces a remount on topic switch so the pop-in
+          // animation actually replays — a className change alone doesn't
+          // restart a CSS animation on an element React just keeps updating.
+          <div key={active.id} className="stack-card card-pop" style={{ zIndex: 10 }}>
             <div style={{ position: 'absolute', top: 18, right: 18, width: 40, height: 40, borderRadius: 20, background: 'rgba(255,80,80,0.1)', border: '1px solid rgba(255,160,160,0.38)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <HeartIcon />
             </div>

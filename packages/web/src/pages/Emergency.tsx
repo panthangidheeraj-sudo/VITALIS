@@ -136,7 +136,7 @@ export function Emergency() {
 
   if (caseId === undefined) {
     return (
-      <div className="page">
+      <div className="page fade-up">
         <h1 className="h1">Emergency triage</h1>
         <p className="body-text">A few details first, so the clinical engine can score correctly.</p>
         <div className="glass card">
@@ -179,7 +179,7 @@ export function Emergency() {
   const question = lastTurn?.question;
 
   return (
-    <div className="page">
+    <div className="page fade-up">
       <h1 className="h1">Emergency triage</h1>
 
       <div className="glass glass-lift" style={{ borderRadius: 20, overflow: 'hidden' }}>

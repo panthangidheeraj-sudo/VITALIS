@@ -8,7 +8,10 @@ import { FirstAid } from './pages/FirstAid';
 export function App() {
   return (
     <BrowserRouter>
-      <div className="app-shell">
+      {/* One slow, cheap ambient glow behind everything — see theme.css's
+          .bg-glow: transform+opacity only, a single element, GPU-composited. */}
+      <div className="bg-glow" />
+      <div className="app-shell" style={{ position: 'relative', zIndex: 1 }}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/assistant" element={<Assistant />} />

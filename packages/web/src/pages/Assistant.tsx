@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { CaseId } from '@triage/shared';
 import { api, ApiError, resolveOwnerUid, type CaseSummary, type TurnResponse } from '../api/client';
 import { HoldButton } from '../components/HoldButton';
+import { WaveField } from '../components/WaveField';
 
 /**
  * Ported from packages/mobile/src/screens/AssistantScreen.tsx — same rule:
@@ -145,8 +146,9 @@ export function Assistant() {
   const awaitingConfirmation = summary?.status === 'awaiting_confirmation' && summary.routing !== undefined;
 
   return (
-    <div className="page" style={{ paddingBottom: 140 }}>
-      <div className="row" style={{ justifyContent: 'space-between' }}>
+    <div className="page" style={{ paddingBottom: 140, position: 'relative' }}>
+      <WaveField />
+      <div className="row fade-up" style={{ justifyContent: 'space-between', position: 'relative' }}>
         <h1 className="h1">Assistant</h1>
         {summary !== undefined ? (
           <span
@@ -163,7 +165,7 @@ export function Assistant() {
         ) : null}
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, position: 'relative' }}>
         {messages.map((m) => (
           <div key={m.id} style={{ display: 'flex', flexDirection: 'column', alignItems: m.who === 'user' ? 'flex-end' : 'flex-start' }}>
             <div
@@ -216,6 +218,7 @@ export function Assistant() {
           margin: '0 auto',
           padding: '0 20px',
           gap: 8,
+          zIndex: 2,
         }}
       >
         <input
@@ -225,8 +228,8 @@ export function Assistant() {
           className="text-input glass"
           style={{ flex: 1, borderRadius: 999, padding: '13px 17px' }}
         />
-        <button type="submit" className="btn btn-primary" style={{ borderRadius: '50%', width: 46, height: 46, padding: 0 }}>
-          ↑
+        <button type="submit" className="btn btn-primary" disabled={busy} style={{ borderRadius: '50%', width: 46, height: 46, padding: 0 }}>
+          {busy ? <span className="spinner" /> : '↑'}
         </button>
       </form>
     </div>
