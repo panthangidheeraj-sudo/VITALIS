@@ -22,6 +22,7 @@ import { DEMO_LEXICON } from '../tools/demo-lexicon.js';
 const TEST_CONFIG: ServerConfig = {
   port: 0,
   nodeEnv: 'test',
+  corsAllowedOrigins: undefined,
   firebase: { credentialsPath: undefined, projectId: undefined, enabled: false },
   groq: {
     apiKey: undefined,

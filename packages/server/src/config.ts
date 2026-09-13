@@ -25,6 +25,18 @@ export interface ServerConfig {
   readonly port: number;
   readonly nodeEnv: string;
   /**
+   * `undefined` = allow any origin. CORS only governs BROWSER clients — Expo
+   * Go's fetch is not a browser and never enforces or even reads these
+   * headers, so this setting cannot be what breaks or fixes mobile
+   * connectivity. It exists for the same reason the rest of this file states
+   * defaults explicitly: a `NODE_ENV=production` deploy (Render sets this)
+   * used to silently set `origin: false`, which blocks every browser-based
+   * client with no error message anywhere explaining why - the "degrade
+   * loudly" rule applies to configuration mistakes too, not just to external
+   * API failures.
+   */
+  readonly corsAllowedOrigins: readonly string[] | undefined;
+  /**
    * Firestore is used only when an Admin credential is present. Without it the
    * server falls back to the in-memory store: the agent loop still runs and
    * every endpoint still works, but the mobile app cannot observe live updates
@@ -174,6 +186,7 @@ export function loadConfig(): ServerConfig {
       contactEmail: optional('OSM_CONTACT_EMAIL'),
     },
     forceLocalScorer: optional('FORCE_LOCAL_SCORER') === 'true',
+    corsAllowedOrigins: optional('CORS_ALLOWED_ORIGINS')?.split(',').map((s) => s.trim()),
   };
 }
 

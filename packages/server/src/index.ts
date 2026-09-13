@@ -28,10 +28,17 @@ const app = createApp({ tools, config, firestoreEnabled });
  */
 const companion = new CompanionScheduler(tools);
 
-app.listen(config.port, () => {
+// Explicit '0.0.0.0' rather than the default host: Render (and most PaaS
+// hosts) route external traffic to the container on all interfaces, and
+// Node's default without a host argument is technically dual-stack but not
+// guaranteed to be what a given platform's health check expects. Binding
+// explicitly is what Render's own deployment docs call for, and it is a
+// no-op for local development — a LAN device reaching this by IP already
+// requires all-interfaces binding, which is what was happening anyway.
+app.listen(config.port, '0.0.0.0', () => {
   companion.start();
   console.log(`\n  Adaptive Emergency Triage Agent — orchestrator`);
-  console.log(`  http://localhost:${config.port}\n`);
+  console.log(`  listening on 0.0.0.0:${config.port} (http://localhost:${config.port} locally)\n`);
   for (const line of describeCapabilities(config)) console.log(`  ${line}`);
   console.log(
     companion.supported

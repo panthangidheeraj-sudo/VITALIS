@@ -7,11 +7,21 @@
  * than by holding a connection open.
  *
  * ── THE THING THAT WILL WASTE AN HOUR IF YOU DO NOT KNOW IT ──────────────────
- * `localhost` on a physical phone means THE PHONE, not your laptop. Running the
- * app in Expo Go on a real device with EXPO_PUBLIC_API_URL=http://localhost:8787
- * fails with an opaque network error. Set it to the laptop's LAN address —
- * `http://192.168.x.x:8787` — with both devices on the same Wi-Fi. The Expo CLI
- * prints that address when it starts.
+ * `localhost` on a physical phone means THE PHONE, not your laptop.
+ *
+ * TWO DIFFERENT FIXES for two different situations, and picking the wrong one
+ * is the single most common way this "works on my emulator" and nowhere else:
+ *
+ *   - Phone on the SAME Wi-Fi as your laptop: set EXPO_PUBLIC_API_URL to your
+ *     computer's LAN address, e.g. http://192.168.1.42:8787 (the Expo CLI
+ *     prints this on start). The server must also be running on that laptop.
+ *
+ *   - Phone on a DIFFERENT network, a different city, or anyone who is not
+ *     you: a LAN IP is unreachable from outside that Wi-Fi, full stop — no
+ *     amount of `.env` tweaking fixes that, because it is not a config
+ *     problem, it is that the address genuinely does not route there. The
+ *     server has to be deployed somewhere with a public URL (Render, Fly,
+ *     Railway, ...) and EXPO_PUBLIC_API_URL has to point at THAT.
  * ────────────────────────────────────────────────────────────────────────────
  */
 
@@ -32,7 +42,30 @@ import type { BiologicalSex, CaseId, Hospital, Language, RiskTier, RoutingDecisi
  * wrong URL": it means the URL a physical device actually used was NEVER
  * configurable, on Home or Emergency alike, in any release build.
  */
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? 'http://localhost:8787';
+const RAW_ENV_URL = process.env.EXPO_PUBLIC_API_URL;
+const BASE_URL = RAW_ENV_URL ?? 'http://localhost:8787';
+
+/**
+ * Loud, not silent. A missing env var falling back to `localhost` used to
+ * fail with an opaque "could not reach the assistant" deep inside a chat
+ * bubble, with nothing anywhere saying WHY — the developer had to already
+ * know this file's history to guess. `__DEV__` is a real-device-safe global
+ * Metro defines at bundle time; this never runs in a release build.
+ */
+if (typeof __DEV__ !== 'undefined' && __DEV__) {
+  if (RAW_ENV_URL === undefined) {
+    console.warn(
+      '[vitalis] EXPO_PUBLIC_API_URL is not set — falling back to ' +
+        `${BASE_URL}, which only works on an emulator/simulator on this same machine. ` +
+        'Set EXPO_PUBLIC_API_URL in packages/mobile/.env (your LAN IP for a phone on the ' +
+        'same Wi-Fi, or your deployed backend URL for a phone on any other network), then ' +
+        'fully restart `npx expo start` — this value is inlined at bundle time, a reload alone will not pick it up.',
+    );
+  } else {
+    // eslint-disable-next-line no-console
+    console.log(`[vitalis] API base URL: ${BASE_URL}`);
+  }
+}
 
 /** Server responses are summaries; full state arrives over the Firestore listener. */
 export interface CaseSummary {
@@ -138,7 +171,24 @@ async function request<T>(path: string, body?: unknown): Promise<T> {
   }
 
   const text = await response.text();
-  const parsed = text.length > 0 ? (JSON.parse(text) as Record<string, unknown>) : {};
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = text.length > 0 ? (JSON.parse(text) as Record<string, unknown>) : {};
+  } catch {
+    // A non-JSON body — an HTML error page from a misconfigured proxy, a
+    // captive-portal login page, a platform's own 502/503 page — reaching
+    // this far means SOMETHING answered, just not the orchestrator. Before
+    // this was caught, `JSON.parse` threw a raw SyntaxError here that every
+    // caller's `err instanceof ApiError` check silently failed, so the UI
+    // fell through to a generic "try again" message with no indication this
+    // was even a network problem.
+    throw new ApiError(
+      response.status,
+      'invalid_response',
+      `${BASE_URL} did not return JSON (got ${response.status}). This usually means the URL points at ` +
+        "something that isn't the orchestrator — check EXPO_PUBLIC_API_URL.",
+    );
+  }
 
   if (!response.ok) {
     throw new ApiError(

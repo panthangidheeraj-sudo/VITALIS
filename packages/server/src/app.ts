@@ -34,9 +34,18 @@ export function createApp({ tools, config, firestoreEnabled }: AppDeps): Express
       })
     : undefined;
 
-  // The Expo dev client connects from an arbitrary LAN origin, so development
-  // accepts any origin. Tighten to an allow-list before this is ever public.
-  app.use(cors({ origin: config.nodeEnv === 'production' ? false : true }));
+  // Expo Go's fetch is not a browser and ignores CORS entirely — this only
+  // ever matters for a browser-based client (a future web dashboard, or
+  // just testing the API from a browser devtools console). Previously this
+  // was `origin: false` in production, which silently blocks every such
+  // client with no indication why; now it defaults to allowing any origin,
+  // same as development, unless CORS_ALLOWED_ORIGINS names a specific list
+  // to restrict to.
+  app.use(
+    cors({
+      origin: config.corsAllowedOrigins === undefined ? true : [...config.corsAllowedOrigins],
+    }),
+  );
   app.use(express.json({ limit: '1mb' }));
 
   /**
