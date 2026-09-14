@@ -193,7 +193,14 @@ describe('beat 6 — final outcome', () => {
     expect(demoCase.hospital?.specialtyMatched).toBe(true);
     expect(demoCase.hospital?.requiredSpecialty).toBe('cardiology');
     expect(demoCase.hospital?.hospital.dataProvenance.location).toBe('openstreetmap');
-    expect(demoCase.hospital?.hospital.dataProvenance.bedAvailability).toBe('simulated');
+  });
+
+  it('carries no simulated capacity data on the hospital record', () => {
+    // Bed availability was a deterministic fake carried beside real OSM
+    // fields. It is gone; this guards against it being reintroduced as a
+    // "harmless" demo nicety.
+    expect(demoCase.hospital?.hospital).not.toHaveProperty('bedAvailability');
+    expect(JSON.stringify(demoCase.hospital)).not.toMatch(/bed/i);
   });
 
   it('sends the pre-arrival summary and marks it simulated', () => {

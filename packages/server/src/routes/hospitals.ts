@@ -10,6 +10,7 @@
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { z } from 'zod';
 import type { AgentTools } from '@triage/shared';
+import { haversineKm } from '@triage/shared';
 
 const nearbySchema = z.object({
   lat: z.coerce.number().min(-90).max(90),
@@ -47,14 +48,30 @@ export function createHospitalRoutes(tools: AgentTools): Router {
       });
 
       if (!result.ok) {
+        // The internal message is a diagnostic - it carries the upstream URL
+        // and the raw transport error ("https://overpass-api.de/api/
+        // interpreter: fetch failed"), which was being rendered verbatim on
+        // the Emergency screen. It goes to the server log; the client gets
+        // the port's own user-facing sentence, or a safe default.
+        console.warn(`[hospitals] lookup failed: ${result.error.message}`);
         res.status(502).json({
           error: 'hospital_lookup_failed',
-          message: result.error.message,
+          message:
+            result.degraded?.userFacingMessage ??
+            'Nearby hospitals are temporarily unavailable. Please try again.',
         });
         return;
       }
 
-      res.json({ hospitals: result.data });
+      // Distance is real arithmetic on real coordinates (both from OSM), not
+      // an estimate — the port already ranks by it internally but discarded
+      // it, so the UI had a `distanceKm` field it read and nothing ever sent.
+      res.json({
+        hospitals: result.data.map((hospital) => ({
+          ...hospital,
+          distanceKm: Number(haversineKm({ lat, lng }, hospital.location).toFixed(2)),
+        })),
+      });
     }),
   );
 

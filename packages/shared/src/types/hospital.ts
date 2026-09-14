@@ -4,12 +4,19 @@
  * DELIBERATE DEVIATION, flagged: the spec names Google Places for real
  * locations. Places requires a billing card even inside its free credit, and
  * this build is free-tier only. Real coordinates therefore come from
- * OpenStreetMap (Overpass / Nominatim — genuinely keyless), layered with the
- * mock specialty + bed-availability dataset exactly as the spec intends, since
- * no public API exposes live bed counts anyway. `HospitalPort` hides the
- * difference, so swapping Places back in is a one-file change.
+ * OpenStreetMap (Overpass / Nominatim — genuinely keyless). `HospitalPort`
+ * hides the difference, so swapping Places back in is a one-file change.
  *
- * `bedAvailability` and `specialties` are SIMULATED and every record says so.
+ * EVERYTHING ON THESE TYPES IS REAL SURVEYED DATA. There was previously a
+ * simulated overlay here — deterministic fake bed counts and padded-out
+ * specialty lists — carried alongside the real fields with `simulated: true`
+ * markers to keep them distinguishable. It has been removed outright rather
+ * than relabelled: in an emergency app, a plausible number next to a real
+ * hospital's real phone number is read as fact no matter what the caption
+ * says, and no public API publishes live bed counts to replace it with.
+ *
+ * The rule this file now enforces is simply: a field is present only when
+ * OpenStreetMap actually carries it. Absent data stays absent.
  */
 
 import type { GeoPoint, IsoTimestamp } from './common.js';
@@ -29,15 +36,6 @@ export const HOSPITAL_SPECIALTIES = [
 ] as const;
 export type HospitalSpecialty = (typeof HOSPITAL_SPECIALTIES)[number];
 
-/** Simulated capacity. Never presented as live hospital data. */
-export interface BedAvailability {
-  readonly simulated: true;
-  readonly emergencyBedsFree: number;
-  readonly icuBedsFree: number;
-  readonly totalEmergencyBeds: number;
-  readonly lastUpdated: IsoTimestamp;
-}
-
 export interface Hospital {
   /** OpenStreetMap element id, e.g. `node/123456789`. Stable and free to use. */
   readonly osmId: string;
@@ -45,18 +43,20 @@ export interface Hospital {
   readonly location: GeoPoint;
   readonly address?: string;
   readonly phone?: string;
-  /** Real, from OSM tags where present. */
+  /** From the OSM `operator:type` tag where present. */
   readonly isPublic?: boolean;
 
-  /** Simulated overlay — see file header. */
+  /**
+   * ONLY what OSM's `healthcare:speciality` tag actually declares, which for
+   * most facilities is nothing — an empty array means "not surveyed", never
+   * "none". Previously this was padded out deterministically from a hash of
+   * the OSM id, which made every hospital appear to declare several.
+   */
   readonly specialties: readonly HospitalSpecialty[];
-  readonly bedAvailability: BedAvailability;
   readonly hasEmergencyDepartment: boolean;
-  /** Which fields came from OSM versus the mock overlay. Shown in the UI. */
+  /** Where the record came from. */
   readonly dataProvenance: {
     readonly location: 'openstreetmap' | 'google_places' | 'fixture';
-    readonly specialties: 'simulated';
-    readonly bedAvailability: 'simulated';
   };
 }
 

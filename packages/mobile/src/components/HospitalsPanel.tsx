@@ -85,8 +85,8 @@ export function HospitalsPanel() {
         ))
       )}
       <Text style={[type.foot, { marginTop: 8 }]}>
-        Location and address are real (OpenStreetMap). Specialties and bed counts, where shown
-        elsewhere, are simulated — no public API publishes live bed availability.
+        Names, addresses and locations from OpenStreetMap. Call ahead to confirm — availability is
+        not published anywhere and is never shown here.
       </Text>
     </Glass>
   );

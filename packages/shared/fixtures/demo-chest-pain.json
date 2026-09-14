@@ -301,25 +301,16 @@
         "phone": "+916742476789",
         "isPublic": true,
         "specialties": ["emergency", "cardiology", "general_medicine", "trauma"],
-        "bedAvailability": {
-          "simulated": true,
-          "emergencyBedsFree": 4,
-          "icuBedsFree": 2,
-          "totalEmergencyBeds": 30,
-          "lastUpdated": "2026-09-12T07:05:40.000Z"
-        },
         "hasEmergencyDepartment": true,
         "dataProvenance": {
-          "location": "openstreetmap",
-          "specialties": "simulated",
-          "bedAvailability": "simulated"
+          "location": "openstreetmap"
         }
       },
       "distanceKm": 6.4,
       "estimatedTravelMinutes": 14,
       "requiredSpecialty": "cardiology",
       "specialtyMatched": true,
-      "matchRationale": "Nearest facility with both an emergency department and cardiology cover, with free emergency beds. Two closer hospitals lack cardiology.",
+      "matchRationale": "Nearest facility with both an emergency department and cardiology cover. Two closer hospitals lack cardiology.",
       "matchedAt": "2026-09-12T07:05:45.000Z"
     },
 
@@ -595,7 +586,7 @@
       "id": "tl_018",
       "kind": "hospital_matched",
       "provenance": "tool_output",
-      "summary": "AIIMS Bhubaneswar — 6.4 km, cardiology available, 4 emergency beds free",
+      "summary": "AIIMS Bhubaneswar — 6.4 km, cardiology available",
       "riskTierAfter": "red",
       "toolCallId": "tc_012",
       "at": "2026-09-12T07:05:45.000Z",

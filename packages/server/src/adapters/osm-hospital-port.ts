@@ -6,31 +6,39 @@
  * Overpass API, which is genuinely keyless. `HospitalPort` hides the
  * difference; swapping Places back in is a one-file change.
  *
+ * EVERY FIELD HERE IS SURVEYED DATA. This adapter used to carry a simulated
+ * overlay - bed counts and padded specialty lists derived from a hash of the
+ * OSM id - labelled `simulated: true` so a consumer could tell them apart.
+ * Both are gone. Nothing is generated; a hospital that OSM has no phone number
+ * for simply has no phone number.
+ *
  * ---------------------------------------------------------------------------
- * THE PROVENANCE SPLIT, WHICH IS THE POINT OF THIS FILE
+ * OVERPASS RELIABILITY, WHICH IS THE OTHER POINT OF THIS FILE
  *
- * Everything here is one of two things, and each record says which:
+ * Overpass is a free service on donated capacity, and the main endpoint fails
+ * often enough that a single-endpoint client is a broken feature. Measured
+ * against overpass-api.de from one machine, minutes apart: HTTP 200 in 3.5s,
+ * then HTTP 504 with an XML error body, then 200 again. Other public instances
+ * returned HTTP 504 after 98 SECONDS, or failed at the transport layer
+ * outright ("fetch failed"). A deployed host makes this worse, not better:
+ * Overpass rate-limits per IP, and on a shared platform that IP is shared with
+ * every other tenant on the box.
  *
- *   REAL, from OSM   - name, coordinates, address, phone, emergency=yes tag
- *   SIMULATED        - specialties, bed availability
+ * So the client tries a list of instances in order, moving on when one fails,
+ * with a per-instance timeout short enough that exhausting the list still
+ * finishes in a sane time. Three further details matter:
  *
- * No public API publishes live bed counts anywhere in the world, so the beds
- * are invented. The dishonest version of this adapter would blend the two and
- * present "3 emergency beds free" next to a real hospital's real phone number
- * as though both came from the same place. `dataProvenance` on every record,
- * plus `simulated: true` inside `bedAvailability`, is what stops the UI from
- * being able to make that mistake even by accident.
- *
- * The simulation is DETERMINISTIC - derived from the OSM id - rather than
- * random. A hospital that has three free beds must still have three free beds
- * when the screen refreshes thirty seconds later, or the demo contradicts
- * itself on camera.
+ *   - A 504 from Overpass arrives as an XML/HTML error document with an HTTP
+ *     error status, and its "query timed out" variant can even arrive as 200.
+ *     Both are treated as failures and trigger failover.
+ *   - Only GLOBAL instances belong in the list. Regional extracts
+ *     (overpass.osm.ch, overpass.osm.jp) answer fast and successfully with
+ *     ZERO elements outside their region - which would render as "no hospitals
+ *     near you" to someone standing next to one.
+ *   - Results are cached per rounded coordinate. Hospitals do not move, and
+ *     hammering a donated service is both rude and the fastest way to get
+ *     rate-limited mid-emergency.
  * ---------------------------------------------------------------------------
- *
- * Overpass is a shared free service run on donated capacity. The query is
- * bounded (radius, timeout, element cap) and results are cached per rounded
- * coordinate, because hammering it during a demo is both rude and the fastest
- * way to get rate-limited mid-presentation.
  */
 
 import type {
@@ -39,16 +47,27 @@ import type {
   HospitalSearchRequest,
   HospitalSpecialty,
   PreArrivalSummary,
+  ToolError,
   ToolResult,
 } from '@triage/shared';
-import { HOSPITAL_SPECIALTIES, failedResult, haversineKm, liveResult } from '@triage/shared';
+import { HOSPITAL_SPECIALTIES, failedResult, fallbackResult, haversineKm, liveResult } from '@triage/shared';
 import { requestJson } from './http.js';
 
 export interface OsmHospitalConfig {
+  /** Primary instance; tried first, then FALLBACK_OVERPASS_URLS in order. */
   readonly overpassUrl: string;
   /** Courtesy contact for the User-Agent. Not a credential; may be absent. */
   readonly contactEmail?: string;
 }
+
+/**
+ * Tried after the configured primary, in order. GLOBAL instances only - see
+ * the file header on why a regional extract is worse than an outright error.
+ */
+const FALLBACK_OVERPASS_URLS: readonly string[] = [
+  'https://overpass.private.coffee/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
 
 interface OverpassElement {
   readonly type: 'node' | 'way' | 'relation';
@@ -64,16 +83,31 @@ interface OverpassResponse {
   readonly elements?: readonly OverpassElement[];
 }
 
-/** Overpass is slow and shared; give it more room than a clinical call gets. */
+/**
+ * ONE attempt per instance, not two. Retrying the same struggling endpoint is
+ * how the old 25s x 2 budget turned one bad instance into a 50-second wait;
+ * moving to the next instance is both faster and likelier to work. A healthy
+ * Overpass answers this query in 3-4s, so 12s is generous, and the whole
+ * three-instance walk still finishes inside ~36s worst case.
+ */
 const OVERPASS_POLICY = {
-  maxAttempts: 2,
-  baseDelayMs: 500,
-  maxDelayMs: 2000,
-  timeoutMs: 25_000,
+  maxAttempts: 1,
+  baseDelayMs: 0,
+  maxDelayMs: 0,
+  timeoutMs: 12_000,
 } as const;
 
 /** Cache lifetime. Hospitals do not move; this only bounds staleness of edits. */
 const CACHE_TTL_MS = 10 * 60 * 1000;
+
+/**
+ * How long a cached result may still be served AFTER every instance has
+ * failed. A day-old list of real hospitals beats an error message, because the
+ * thing that actually changed in that day is nothing: buildings do not move,
+ * and the entry was real OSM data when it was fetched. This is a fallback, so
+ * the result is returned as `fallbackResult` with a notice, never as `live`.
+ */
+const STALE_CACHE_MAX_MS = 24 * 60 * 60 * 1000;
 
 interface CacheEntry {
   readonly at: number;
@@ -96,34 +130,83 @@ export class OsmHospitalPort implements HospitalPort {
     // `nwr` covers nodes, ways and relations in one pass - large hospitals are
     // mapped as building outlines (ways), not points, and a node-only query
     // misses exactly the big facilities an emergency needs.
-    const query = `[out:json][timeout:20];nwr(around:${radiusM},${request.origin.lat},${request.origin.lng})[amenity=hospital];out center ${Math.min(request.limit * 4, 40)};`;
+    //
+    // The server-side `[timeout:10]` is deliberately BELOW our own 12s budget:
+    // it makes Overpass abandon an over-long query itself rather than holding
+    // the connection open until we abort it, which is the polite behaviour
+    // toward a donated service and gets us to the next instance sooner.
+    const query = `[out:json][timeout:10];nwr(around:${radiusM},${request.origin.lat},${request.origin.lng})[amenity=hospital];out center ${Math.min(request.limit * 4, 40)};`;
 
-    const outcome = await requestJson<OverpassResponse>(this.config.overpassUrl, {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: `data=${encodeURIComponent(query)}`,
-      policy: OVERPASS_POLICY,
-    });
+    const endpoints = [this.config.overpassUrl, ...FALLBACK_OVERPASS_URLS.filter((u) => u !== this.config.overpassUrl)];
+    let elements: readonly OverpassElement[] | undefined;
+    let totalLatencyMs = 0;
+    let lastError: ToolError | undefined;
 
-    if (!outcome.ok || outcome.value === undefined) {
-      return failedResult(
-        outcome.error ?? { kind: 'unavailable', message: 'Overpass unreachable.', retryable: true },
-        outcome.latencyMs,
-        {
+    for (const endpoint of endpoints) {
+      const outcome = await requestJson<OverpassResponse>(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`,
+        policy: OVERPASS_POLICY,
+      });
+      totalLatencyMs += outcome.latencyMs;
+
+      // An Overpass instance under load answers with an XML/HTML error
+      // document, which `requestJson` surfaces as an invalid_response rather
+      // than a transport error - so BOTH shapes have to fail over, not just
+      // the dead-socket one.
+      if (outcome.ok && outcome.value !== undefined) {
+        elements = outcome.value.elements ?? [];
+        break;
+      }
+      lastError = outcome.error ?? { kind: 'unavailable', message: 'Overpass unreachable.', retryable: true };
+      // Per-instance, because "hospitals are unavailable" is indistinguishable
+      // from "this one instance is rate-limiting us" without it — and which
+      // one it is decides whether to reorder the list or just wait.
+      console.warn(`[osm] overpass instance failed (${lastError.kind}): ${lastError.message}`);
+    }
+
+    if (elements === undefined) {
+      // Every instance failed. If this area was looked up recently enough,
+      // serve that real (if stale) list rather than nothing — labelled as a
+      // fallback so the caller knows it is not a fresh lookup.
+      if (cached !== undefined && Date.now() - cached.at < STALE_CACHE_MAX_MS) {
+        return fallbackResult(cached.hospitals, totalLatencyMs, {
           tool: 'osm.find_hospitals',
           reason: 'unavailable',
           userFacingMessage:
-            'I could not look up nearby hospitals. Call the emergency number and they will route you.',
+            'Showing the last hospital list found for this area — the map service is temporarily unavailable, so it may be out of date.',
+          fallbackUsed: 'cached OpenStreetMap results for the same area',
+          conservative: true,
+        });
+      }
+      return failedResult(
+        lastError ?? { kind: 'unavailable', message: 'Overpass unreachable.', retryable: true },
+        totalLatencyMs,
+        {
+          tool: 'osm.find_hospitals',
+          reason: 'unavailable',
+          // Safe to show verbatim: no URL, no status code, no transport
+          // detail. The second clause is §6 — the patient is told the
+          // assessment itself is unaffected, so a failed list does not read
+          // as "the app is broken, you are on your own".
+          userFacingMessage:
+            'Nearby hospitals are temporarily unavailable. Please try again — in an emergency, call the emergency number and they will route you.',
           fallbackUsed: 'no hospital matched; the routing decision itself is unaffected',
           conservative: true,
         },
       );
     }
 
-    const hospitals = (outcome.value.elements ?? [])
+    const hospitals = elements
       .map((element) => toHospital(element, request.origin))
       .filter((h): h is RankedHospital => h !== undefined)
       .filter((h) => !request.requireEmergencyDepartment || h.hospital.hasEmergencyDepartment)
+      // Now that specialties are only what OSM actually declares, this filter
+      // is genuinely restrictive rather than decorative - it used to match
+      // against a padded list that always contained 'emergency'. No caller
+      // passes `requiredSpecialty` today; one that did would correctly get
+      // only hospitals that really declare it, and an empty list otherwise.
       .filter(
         (h) =>
           request.requiredSpecialty === undefined ||
@@ -134,7 +217,7 @@ export class OsmHospitalPort implements HospitalPort {
       .map((h) => h.hospital);
 
     this.cache.set(key, { at: Date.now(), hospitals });
-    return liveResult(hospitals, outcome.latencyMs);
+    return liveResult(hospitals, totalLatencyMs);
   }
 
   /**
@@ -203,15 +286,26 @@ function toHospital(
       // this direction the error is a wasted extra option; the other direction
       // hides a real ED from someone who needs one.
       hasEmergencyDepartment: tags['emergency'] !== 'no',
-      specialties: simulatedSpecialties(osmId, tags),
-      bedAvailability: simulatedBeds(osmId),
-      dataProvenance: {
-        location: 'openstreetmap',
-        specialties: 'simulated',
-        bedAvailability: 'simulated',
-      },
+      specialties: declaredSpecialties(tags),
+      dataProvenance: { location: 'openstreetmap' },
     },
   };
+}
+
+/**
+ * ONLY what the `healthcare:speciality` tag actually declares. Most hospitals
+ * declare nothing, and an empty list is the correct answer for those - it
+ * means "not surveyed", and the UI shows nothing rather than a guess.
+ */
+function declaredSpecialties(tags: Record<string, string>): readonly HospitalSpecialty[] {
+  return [
+    ...new Set(
+      (tags['healthcare:speciality'] ?? '')
+        .split(';')
+        .map((s) => s.trim().toLowerCase())
+        .filter((s): s is HospitalSpecialty => (HOSPITAL_SPECIALTIES as readonly string[]).includes(s)),
+    ),
+  ];
 }
 
 function formatAddress(tags: Record<string, string>): string | undefined {
@@ -223,71 +317,6 @@ function formatAddress(tags: Record<string, string>): string | undefined {
     tags['addr:postcode'],
   ].filter((p): p is string => p !== undefined && p.length > 0);
   return parts.length > 0 ? parts.join(', ') : undefined;
-}
-
-/**
- * A small, stable hash of the OSM id.
- *
- * The simulated overlay has to be the SAME on every call, or a hospital gains
- * and loses ICU beds each time the screen re-renders. Deriving it from the id
- * rather than from `Math.random()` is what makes the simulation reproducible
- * for a recorded demo.
- */
-function seedOf(osmId: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < osmId.length; i += 1) {
-    hash ^= osmId.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return Math.abs(hash);
-}
-
-/**
- * SIMULATED. Where OSM actually carries `healthcare:speciality` the real values
- * are used and the rest are padded deterministically - a partially-real list is
- * still labelled simulated as a whole, because a consumer cannot tell which
- * entries were surveyed and which were invented.
- */
-function simulatedSpecialties(
-  osmId: string,
-  tags: Record<string, string>,
-): readonly HospitalSpecialty[] {
-  const declared = (tags['healthcare:speciality'] ?? '')
-    .split(';')
-    .map((s) => s.trim().toLowerCase())
-    .filter((s): s is HospitalSpecialty =>
-      (HOSPITAL_SPECIALTIES as readonly string[]).includes(s),
-    );
-
-  const set = new Set<HospitalSpecialty>(declared);
-  set.add('emergency');
-  set.add('general_medicine');
-
-  const seed = seedOf(osmId);
-  const optional: readonly HospitalSpecialty[] = [
-    'cardiology',
-    'neurology',
-    'trauma',
-    'orthopaedics',
-    'paediatrics',
-  ];
-  for (let i = 0; i < optional.length; i += 1) {
-    if (((seed >> i) & 1) === 1) set.add(optional[i]!);
-  }
-  return [...set];
-}
-
-/** SIMULATED. See the file header - no public API publishes live bed counts. */
-function simulatedBeds(osmId: string) {
-  const seed = seedOf(osmId);
-  const totalEmergencyBeds = 12 + (seed % 29);
-  return {
-    simulated: true as const,
-    totalEmergencyBeds,
-    emergencyBedsFree: (seed >> 5) % Math.max(1, Math.floor(totalEmergencyBeds / 2)),
-    icuBedsFree: (seed >> 11) % 6,
-    lastUpdated: new Date().toISOString(),
-  };
 }
 
 function cacheKey(request: HospitalSearchRequest): string {

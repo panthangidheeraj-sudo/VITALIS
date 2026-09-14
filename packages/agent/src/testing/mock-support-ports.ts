@@ -60,15 +60,8 @@ const MOCK_HOSPITAL: Hospital = {
   name: 'Mock General Hospital',
   location: { lat: 20.2961, lng: 85.8245 },
   specialties: ['emergency', 'cardiology'],
-  bedAvailability: {
-    simulated: true,
-    emergencyBedsFree: 3,
-    icuBedsFree: 1,
-    totalEmergencyBeds: 20,
-    lastUpdated: new Date().toISOString(),
-  },
   hasEmergencyDepartment: true,
-  dataProvenance: { location: 'fixture', specialties: 'simulated', bedAvailability: 'simulated' },
+  dataProvenance: { location: 'fixture' },
 };
 
 export class MockHospitalPort implements HospitalPort {

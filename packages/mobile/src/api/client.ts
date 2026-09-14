@@ -355,8 +355,8 @@ export const api = {
 
   /**
    * Nearby hospitals (5.3 UI) - a thin pass-through to `tools.hospitals.findNearby`.
-   * See `packages/server/src/routes/hospitals.ts` for the provenance split
-   * between real OSM fields and the simulated bed/specialty overlay.
+   * Every field is real OpenStreetMap data; anything OSM does not carry is
+   * absent rather than generated. See `packages/server/src/routes/hospitals.ts`.
    */
   nearbyHospitals: (lat: number, lng: number, radiusKm = 10, limit = 5) =>
     request<{ hospitals: readonly Hospital[] }>(

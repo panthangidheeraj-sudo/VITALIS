@@ -258,19 +258,11 @@ export const hospitalSchema = z.object({
   address: z.string().optional(),
   phone: z.string().optional(),
   isPublic: z.boolean().optional(),
+  /** Only OSM's declared `healthcare:speciality`; empty means "not surveyed". */
   specialties: z.array(z.enum(HOSPITAL_SPECIALTIES)),
-  bedAvailability: z.object({
-    simulated: z.literal(true),
-    emergencyBedsFree: z.number().int().nonnegative(),
-    icuBedsFree: z.number().int().nonnegative(),
-    totalEmergencyBeds: z.number().int().nonnegative(),
-    lastUpdated: isoTimestampSchema,
-  }),
   hasEmergencyDepartment: z.boolean(),
   dataProvenance: z.object({
     location: z.enum(['openstreetmap', 'google_places', 'fixture']),
-    specialties: z.literal('simulated'),
-    bedAvailability: z.literal('simulated'),
   }),
 });
 

@@ -80,6 +80,16 @@ export interface MedicationLookup {
   readonly interactionNotice: string;
 }
 
+/**
+ * A hospital as `/hospitals/nearby` returns it: the OSM record plus the
+ * straight-line distance from the coordinates that were searched. Everything
+ * here is real — `distanceKm` is haversine over two real positions, and any
+ * field OSM does not carry is absent rather than filled in.
+ */
+export interface NearbyHospital extends Hospital {
+  readonly distanceKm: number;
+}
+
 export interface MedicineInfoSource {
   readonly provider: 'rxnorm' | 'medlineplus' | 'dailymed' | 'model';
   readonly title: string;
@@ -221,7 +231,7 @@ export const api = {
     request<{ ok: boolean }>(`/cases/${caseId}/location`, { lat, lng, source: 'browser_geolocation' }),
 
   nearbyHospitals: (lat: number, lng: number, radiusKm = 10, limit = 5) =>
-    request<{ hospitals: readonly Hospital[] }>(
+    request<{ hospitals: readonly NearbyHospital[] }>(
       `/hospitals/nearby?lat=${lat}&lng=${lng}&radiusKm=${radiusKm}&limit=${limit}`,
     ),
 

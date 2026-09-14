@@ -65,8 +65,8 @@ export const patientPath = (patientId: PatientId): string =>
   `${COLLECTIONS.patients}/${patientId}`;
 
 /**
- * `hospitals/{osmId}` — the simulated specialty + bed-availability overlay,
- * keyed by OpenStreetMap element id so it joins onto real coordinates.
+ * `hospitals/{osmId}` — cached hospital records, keyed by OpenStreetMap
+ * element id.
  * OSM ids contain a slash (`node/123`), which is illegal in a Firestore
  * document id, so they are encoded.
  */

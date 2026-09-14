@@ -1,17 +1,18 @@
 import { useState } from 'react';
-import type { Hospital } from '@triage/shared';
-import { api, ApiError } from '../api/client';
+import { api, ApiError, type NearbyHospital } from '../api/client';
+import { EMERGENCY_NUMBER } from '../data/firstAidContent';
 
 type Status =
   | { readonly kind: 'idle' }
   | { readonly kind: 'loading' }
-  | { readonly kind: 'done'; readonly hospitals: readonly Hospital[] }
+  | { readonly kind: 'done'; readonly hospitals: readonly NearbyHospital[] }
   | { readonly kind: 'unavailable'; readonly message: string };
 
 /** Browser port of packages/mobile/src/components/HospitalsPanel.tsx — same
- * `GET /hospitals/nearby` call, same "no photos, real OSM data only, bed
- * counts are simulated" honesty. Uses the browser Geolocation API instead of
- * expo-location. Requires explicit action before requesting location. */
+ * `GET /hospitals/nearby` call. Everything shown is real OpenStreetMap data;
+ * a field OSM does not carry is simply not rendered. Uses the browser
+ * Geolocation API instead of expo-location, and requires an explicit tap
+ * before requesting location. */
 export function HospitalsPanel() {
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
 
@@ -26,12 +27,20 @@ export function HospitalsPanel() {
         api
           .nearbyHospitals(position.coords.latitude, position.coords.longitude)
           .then((result) => setStatus({ kind: 'done', hospitals: result.hospitals }))
-          .catch((err) =>
+          .catch((err) => {
+            // NEVER render the raw error. An upstream failure here used to
+            // print "https://overpass-api.de/api/interpreter: fetch failed"
+            // into the Emergency screen. The server already replaces its own
+            // diagnostics with a user-facing sentence, but a transport
+            // failure between browser and server (offline, CORS, 502 HTML
+            // from a proxy) would still surface an internal string, so this
+            // side never trusts the message either.
+            if (err instanceof ApiError) console.warn(`[hospitals] ${err.code}: ${err.message}`);
             setStatus({
               kind: 'unavailable',
-              message: err instanceof ApiError ? err.message : 'Could not look up nearby hospitals.',
-            }),
-          );
+              message: 'Nearby hospitals are temporarily unavailable. Please try again.',
+            });
+          });
       },
       (error) => {
         setStatus({ kind: 'unavailable', message: error.code === 1 ? 'Location permission was denied.' : 'Location permission was not granted or failed.' });
@@ -75,12 +84,13 @@ export function HospitalsPanel() {
       <div className="label">Nearby hospitals</div>
       {status.kind === 'unavailable' ? (
         <div style={{ marginTop: 8 }}>
-          <p className="small" style={{ color: 'var(--danger-deep)' }}>
-            {status.message}
-          </p>
+          <p className="small">{status.message}</p>
           <button className="btn btn-secondary" onClick={fetchHospitals} style={{ marginTop: 12, width: '100%' }}>
-            Retry Location Permission
+            Try again
           </button>
+          <p className="foot" style={{ marginTop: 10 }}>
+            In an emergency, call {EMERGENCY_NUMBER} — they will route you without this list.
+          </p>
         </div>
       ) : status.hospitals.length === 0 ? (
         <div style={{ marginTop: 8 }}>
@@ -103,26 +113,38 @@ export function HospitalsPanel() {
               borderTop: i > 0 ? '1px solid var(--divider)' : undefined,
             }}
           >
-            <div>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontWeight: 600, fontSize: 13.5 }}>{hospital.name}</div>
-              <div className="small">{hospital.address ?? 'Address not mapped'}</div>
-              {(hospital as Hospital & { distanceKm?: number }).distanceKm !== undefined ? (
-                <div className="foot" style={{ marginTop: 2 }}>{(hospital as Hospital & { distanceKm?: number }).distanceKm!.toFixed(1)} km away</div>
+              {hospital.address !== undefined ? <div className="small">{hospital.address}</div> : null}
+              {typeof hospital.distanceKm === 'number' ? (
+                <div className="foot" style={{ marginTop: 2 }}>{hospital.distanceKm.toFixed(1)} km away</div>
               ) : null}
             </div>
-            {hospital.phone !== undefined ? (
-              <a className="btn btn-primary" style={{ padding: '8px 12px', fontSize: 12, textDecoration: 'none', color: '#fff' }} href={`tel:${hospital.phone}`}>
-                Call
+            <div className="row" style={{ gap: 6, flex: 'none' }}>
+              {hospital.phone !== undefined ? (
+                <a className="btn btn-primary" style={{ padding: '8px 12px', fontSize: 12, textDecoration: 'none', color: '#fff' }} href={`tel:${hospital.phone}`}>
+                  Call
+                </a>
+              ) : null}
+              {/* Coordinates are real, so directions are too — this opens the
+                  user's own map app rather than asserting anything itself. */}
+              <a
+                className="btn btn-secondary"
+                style={{ padding: '8px 12px', fontSize: 12, textDecoration: 'none' }}
+                href={`https://www.openstreetmap.org/directions?to=${hospital.location.lat}%2C${hospital.location.lng}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Directions
               </a>
-            ) : (
-              <span className="foot" style={{ padding: '8px 0', fontSize: 11 }}>Phone unavailable</span>
-            )}
+            </div>
           </div>
         ))
       )}
       {status.kind === 'done' && status.hospitals.length > 0 && (
         <p className="foot" style={{ marginTop: 12, textAlign: 'center' }}>
-          Location and address are real (OpenStreetMap). Specialties and bed counts, where shown, are simulated.
+          Names, addresses and locations from OpenStreetMap. Call ahead to confirm — availability is not published
+          anywhere and is never shown here.
         </p>
       )}
     </div>

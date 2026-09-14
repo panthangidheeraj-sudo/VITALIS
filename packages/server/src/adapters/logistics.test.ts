@@ -59,11 +59,10 @@ describe('OpenStreetMap hospital matching', () => {
     expect(hospital?.name).toBe('AIIMS Bhubaneswar');
     expect(hospital?.phone).toBe('+916742476789');
 
-    // The whole point of the adapter: a consumer can always tell which half of
-    // the record came from a survey and which half was invented here.
+    // Every field on the record is surveyed data now — nothing is generated,
+    // so there is no "other half" to label.
     expect(hospital?.dataProvenance.location).toBe('openstreetmap');
-    expect(hospital?.dataProvenance.bedAvailability).toBe('simulated');
-    expect(hospital?.bedAvailability.simulated).toBe(true);
+    expect(hospital).not.toHaveProperty('bedAvailability');
   });
 
   /**
@@ -120,33 +119,52 @@ describe('OpenStreetMap hospital matching', () => {
   });
 
   /**
-   * The simulated overlay must not change between calls. A hospital that gains
-   * and loses ICU beds on every re-render contradicts itself on camera, and a
-   * judge who notices stops trusting the real numbers next to it.
+   * The record must contain nothing the survey did not provide. This replaces
+   * a test that asserted the SIMULATED bed counts were at least deterministic
+   * between calls — the fake capacity data is gone entirely, and this guards
+   * against any of it coming back.
    */
-  it('simulates the same bed counts every time for the same hospital', async () => {
-    const payload = {
+  it('invents nothing: no capacity data, and no specialties OSM did not declare', async () => {
+    stubFetch({
       elements: [{ type: 'node', id: 42, lat: 20.3, lon: 85.83, tags: { name: 'Steady' } }],
-    };
-    stubFetch(payload);
-    const first = await new OsmHospitalPort(OVERPASS).findNearby({
-      origin: ORIGIN,
-      radiusKm: 20,
-      requireEmergencyDepartment: true,
-      limit: 5,
     });
-    stubFetch(payload);
-    const second = await new OsmHospitalPort(OVERPASS).findNearby({
+    const result = await new OsmHospitalPort(OVERPASS).findNearby({
       origin: ORIGIN,
       radiusKm: 20,
       requireEmergencyDepartment: true,
       limit: 5,
     });
 
-    const a = first.ok ? first.data[0]!.bedAvailability : undefined;
-    const b = second.ok ? second.data[0]!.bedAvailability : undefined;
-    expect(a?.emergencyBedsFree).toBe(b?.emergencyBedsFree);
-    expect(a?.icuBedsFree).toBe(b?.icuBedsFree);
+    const hospital = result.ok ? result.data[0]! : undefined;
+    expect(hospital?.name).toBe('Steady');
+    expect(JSON.stringify(hospital)).not.toMatch(/bed|simulated/i);
+    // No `healthcare:speciality` tag was supplied, so the list is empty —
+    // "not surveyed", rather than a plausible-looking guess.
+    expect(hospital?.specialties).toEqual([]);
+  });
+
+  it('keeps only the specialties OSM actually declares', async () => {
+    stubFetch({
+      elements: [
+        {
+          type: 'node',
+          id: 43,
+          lat: 20.3,
+          lon: 85.83,
+          tags: { name: 'Declared', 'healthcare:speciality': 'cardiology;paediatrics;astrology' },
+        },
+      ],
+    });
+    const result = await new OsmHospitalPort(OVERPASS).findNearby({
+      origin: ORIGIN,
+      radiusKm: 20,
+      requireEmergencyDepartment: true,
+      limit: 5,
+    });
+
+    // Real values pass through; an unrecognised one is dropped rather than
+    // coerced, and nothing is added to pad the list out.
+    expect(result.ok ? result.data[0]!.specialties : undefined).toEqual(['cardiology', 'paediatrics']);
   });
 
   /**

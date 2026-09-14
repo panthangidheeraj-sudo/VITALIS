@@ -217,7 +217,7 @@ export function describeCapabilities(config: ServerConfig): readonly string[] {
     config.gemini.enabled
       ? `Vision         : LIVE - Gemini ${config.gemini.visionModel} (injury photos only; Groq keeps all text tasks)`
       : 'Vision         : UNAVAILABLE - no GEMINI_API_KEY. Injury photo assessment is disabled and says so.',
-    'Hospitals      : LIVE - OpenStreetMap / Overpass. Coordinates are real; specialties and bed counts are SIMULATED and labelled as such on every record.',
+    'Hospitals      : LIVE - OpenStreetMap / Overpass, with failover across public instances. Every field is surveyed data; nothing is simulated.',
     config.twilio.enabled
       ? config.twilio.live
         ? `Notifications  : LIVE - Twilio will really send (WhatsApp from ${config.twilio.whatsappFrom ?? 'unset'}). Real phones will ring.`

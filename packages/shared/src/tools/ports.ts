@@ -238,7 +238,7 @@ export interface HospitalSearchRequest {
   readonly limit: number;
 }
 
-/** OpenStreetMap for real coordinates, plus the simulated specialty/bed overlay. */
+/** OpenStreetMap. Real surveyed data only — no generated capacity or specialties. */
 export interface HospitalPort {
   findNearby(request: HospitalSearchRequest): Promise<ToolResult<readonly Hospital[]>>;
   /** Pushes the pre-arrival packet to a simulated hospital endpoint (§5.3). */

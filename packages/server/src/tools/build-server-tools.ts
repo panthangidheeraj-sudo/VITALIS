@@ -119,9 +119,10 @@ export function buildServerTools(config: ServerConfig): BuiltTools {
           release: config.icd11.release,
         })
       : new MockCodingPort(),
-    // Real coordinates from OpenStreetMap. The specialty and bed-count overlay
-    // is still simulated - no public API publishes live bed counts - and every
-    // record carries `dataProvenance` saying which half is which.
+    // Real OpenStreetMap data only - coordinates, name, address, phone, and
+    // any specialty OSM actually declares. Nothing is generated to fill gaps.
+    // The configured URL is the FIRST Overpass instance tried; the port fails
+    // over to other public instances on its own (see its header).
     hospitals: new OsmHospitalPort({
       overpassUrl: config.osm.overpassUrl,
       ...(config.osm.contactEmail !== undefined ? { contactEmail: config.osm.contactEmail } : {}),

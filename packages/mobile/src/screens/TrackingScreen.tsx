@@ -14,9 +14,11 @@
  *    bar is hidden here, so nothing competes with it.
  *
  * 2. THE SIMULATED PARTS ARE LABELLED WHERE THEY APPEAR. Dispatch is simulated;
- *    the bed counts and specialty match are simulated; the coordinates are not.
- *    Those notes sit next to the values rather than in a footnote, because a
- *    disclaimer at the bottom of a scroll is read by nobody.
+ *    the hospital's coordinates, name and address are not. (Bed availability
+ *    used to be simulated here too — it has been removed outright rather than
+ *    labelled, since no public API publishes it.) Those notes sit next to the
+ *    values rather than in a footnote, because a disclaimer at the bottom of a
+ *    scroll is read by nobody.
  * ---------------------------------------------------------------------------
  */
 
@@ -132,8 +134,8 @@ export function TrackingScreen({ caseId, onCancelled, onOpenCompanion, onOpenHan
               {match.hospital.address ?? 'Address not recorded in OpenStreetMap'}
             </Text>
             <Text style={styles.provenance}>
-              Coordinates and name from OpenStreetMap. Specialty match and bed availability are
-              SIMULATED — no public API publishes live bed counts.
+              Coordinates, name and address from OpenStreetMap. Call ahead to confirm — bed
+              availability is not published anywhere and is never shown here.
             </Text>
             {match.hospital.phone === undefined ? null : (
               <Text style={[type.mono, { marginTop: 10, color: colors.brand }]}>
