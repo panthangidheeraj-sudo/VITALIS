@@ -18,11 +18,41 @@
     <!-- Static, JS-free branded loading state: React replaces #root's children on
          mount, so this is only ever visible during the initial script fetch/parse. -->
     <div id="root">
-      <div style="min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#F4F7FC;">
+      <div id="vitalis-boot" style="min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:#F4F7FC;">
         <img src="/assets/vitalis-logo.svg" width="64" height="64" style="border-radius:16px;" alt="" />
         <span style="font-family:'Plus Jakarta Sans',system-ui,sans-serif;font-weight:800;font-size:15px;letter-spacing:0.3px;color:#142744;">VITALIS</span>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>
+    <!--
+      BOOT WATCHDOG. Deliberately a CLASSIC script, not a module: if the module
+      graph fails to evaluate, every `type="module"` script is dead and only
+      this still runs.
+
+      React replaces #root's children on mount, so the placeholder above being
+      STILL PRESENT after this delay means the app never started — a failed
+      chunk, a throw at import time, a blocked asset. Without this, that state
+      renders as the VITALIS logo forever, which is indistinguishable from a
+      slow load and leaves the user waiting on something that is never coming.
+      This happened in production: a Firebase config missing at build time threw
+      during module evaluation, and the placeholder sat there permanently.
+
+      It never hides a working app: if React mounted, this element is gone and
+      the callback does nothing.
+    -->
+    <script>
+      (function () {
+        setTimeout(function () {
+          var boot = document.getElementById('vitalis-boot');
+          if (!boot || !boot.isConnected) return;
+          boot.innerHTML =
+            '<img src="/assets/vitalis-logo.svg" width="56" height="56" style="border-radius:14px;opacity:0.5" alt="">' +
+            '<p style="font-family:system-ui,sans-serif;font-weight:700;font-size:15px;color:#142744;margin:14px 0 4px">VITALIS could not start</p>' +
+            '<p style="font-family:system-ui,sans-serif;font-size:12.5px;line-height:1.5;color:#7185A3;margin:0;max-width:300px;text-align:center">' +
+            'Something went wrong loading the app. Reload to try again — in an emergency, call your local emergency number directly rather than waiting.</p>' +
+            '<button onclick="location.reload()" style="margin-top:16px;font-family:system-ui,sans-serif;font-weight:700;font-size:13px;color:#fff;background:#1769E8;border:none;border-radius:999px;padding:11px 22px;cursor:pointer">Reload</button>';
+        }, 8000);
+      })();
+    </script>
   </body>
 </html>

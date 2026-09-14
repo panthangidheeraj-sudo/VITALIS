@@ -24,6 +24,18 @@ const FULL_SHRINK_AT_MS = 1900;
 const FULL_UNMOUNT_AT_MS = FULL_SHRINK_AT_MS + 480;
 const BRIEF_UNMOUNT_AT_MS = 360;
 
+/**
+ * The hard ceiling. An INDEPENDENT timer, armed once on mount, that reveals the
+ * app no matter what the staged sequence did or failed to do.
+ *
+ * The staged timers above are the normal path; this exists because the intro is
+ * decoration sitting on top of an emergency tool, and decoration must never be
+ * able to hold the door shut. It is deliberately not derived from the other
+ * constants and is never cleared by any branch — if anything above throws,
+ * hangs, or is skipped, this still fires and the app appears.
+ */
+const HARD_REVEAL_AT_MS = 3000;
+
 type Mode = 'full' | 'brief' | 'none';
 
 function pickMode(reducedMotion: boolean): Mode {
@@ -46,6 +58,16 @@ export function IntroSplash({ children }: { readonly children: React.ReactNode }
   const [shrinkStyle, setShrinkStyle] = useState<React.CSSProperties>({});
   const logoRef = useRef<HTMLImageElement>(null);
 
+  /**
+   * The watchdog. Armed on mount, before and independently of every staged
+   * timer, and intentionally in its own effect with an empty dependency list so
+   * no branch, early return, or thrown error can skip arming it.
+   */
+  useEffect(() => {
+    const failsafe = window.setTimeout(() => setVisible(false), HARD_REVEAL_AT_MS);
+    return () => window.clearTimeout(failsafe);
+  }, []);
+
   useEffect(() => {
     if (mode === 'none') return;
     try {
@@ -62,20 +84,29 @@ export function IntroSplash({ children }: { readonly children: React.ReactNode }
 
     const shrinkTimer = window.setTimeout(() => {
       setReady(true);
-      const target = document.getElementById('vitalis-header-logo');
-      const source = logoRef.current;
-      if (target !== null && source !== null) {
-        const t = target.getBoundingClientRect();
-        const s = source.getBoundingClientRect();
-        // Guard against a zero-size rect (header not laid out yet, or off
-        // in an unusual viewport) — a scale of 0 would just vanish the
-        // logo instead of shrinking it, so fall back to a plain fade.
-        if (t.width > 0 && s.width > 0) {
-          const scale = t.width / s.width;
-          const dx = t.left + t.width / 2 - (s.left + s.width / 2);
-          const dy = t.top + t.height / 2 - (s.top + s.height / 2);
-          setShrinkStyle({ transform: `translate(${dx}px, ${dy}px) scale(${scale})` });
+      // The measurement is the ONLY part of this that can realistically throw
+      // (a detached node, an exotic viewport, a zero rect). It is decoration:
+      // if it fails, the logo simply fades instead of flying to the header.
+      // Wrapped so that failure can never skip `setShrinking(true)` below,
+      // which is what makes the app visible.
+      try {
+        const target = document.getElementById('vitalis-header-logo');
+        const source = logoRef.current;
+        if (target !== null && source !== null) {
+          const t = target.getBoundingClientRect();
+          const s = source.getBoundingClientRect();
+          // A zero-size rect (header not laid out yet, or an unusual
+          // viewport) would give a scale of 0 and vanish the logo rather
+          // than shrink it, so fall back to a plain fade.
+          if (t.width > 0 && s.width > 0) {
+            const scale = t.width / s.width;
+            const dx = t.left + t.width / 2 - (s.left + s.width / 2);
+            const dy = t.top + t.height / 2 - (s.top + s.height / 2);
+            setShrinkStyle({ transform: `translate(${dx}px, ${dy}px) scale(${scale})` });
+          }
         }
+      } catch {
+        // Plain fade-out. Nothing else changes.
       }
       setShrinking(true);
     }, FULL_SHRINK_AT_MS);
