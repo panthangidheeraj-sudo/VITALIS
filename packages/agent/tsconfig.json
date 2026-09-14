@@ -5,5 +5,7 @@
     "outDir": "./dist"
   },
   "include": ["src/**/*.ts"],
+  /** Same reason as packages/shared/tsconfig.json — see the note there. */
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"],
   "references": [{ "path": "../shared" }]
 }

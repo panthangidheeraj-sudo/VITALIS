@@ -4,5 +4,18 @@
     "rootDir": "./src",
     "outDir": "./dist"
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts"],
+  /**
+   * Tests are NOT part of the shipped build.
+   *
+   * They import `vitest`, which is a devDependency. A production install
+   * (Render builds with dev dependencies omitted) does not have it, so
+   * compiling them there failed with TS2307 "Cannot find module 'vitest'" and
+   * took the whole deploy down — a test-only concern breaking the artefact.
+   *
+   * Excluding them here does not hide them from the test workflow: vitest
+   * discovers and transpiles spec files itself and never consults this
+   * `include`, so `npm test` still runs every one of them.
+   */
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"]
 }
