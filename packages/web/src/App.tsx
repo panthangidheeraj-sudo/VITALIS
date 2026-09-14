@@ -55,7 +55,10 @@ function RouteTransition({ children }: { readonly children: React.ReactNode }) {
 
   return (
     <div className="route-view">
-      <div key={location.pathname} className={reducedMotion ? undefined : 'route-pane'} data-dir={dir}>
+      {/* `route-pane` is applied ALWAYS — it carries the flex sizing that lets
+          the page fill the screen. Only `data-dir`, which the entrance
+          animation keys off, is withheld under reduced motion. */}
+      <div key={location.pathname} className="route-pane" {...(reducedMotion ? {} : { 'data-dir': dir })}>
         {children}
       </div>
     </div>

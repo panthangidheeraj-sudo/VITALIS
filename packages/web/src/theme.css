@@ -1162,8 +1162,27 @@ textarea:focus-visible {
    atmosphere (.bg-glow, the page wash) lives OUTSIDE this wrapper in App.tsx
    and is never remounted by route changes — that is what keeps it
    continuous underneath the transition. */
+/*
+ * BOTH of these must stretch, or `.page`'s `flex: 1` is meaningless.
+ *
+ * `.app-shell` is a full-height flex column and `.page` claims `flex: 1` to
+ * fill it — but these two wrappers were introduced between them by the motion
+ * pass without any sizing, so they collapsed to content height and `.page`
+ * filled *them* instead of the screen. On Assistant that cut the FloatingLines
+ * atmosphere off at the last message (measured: 658px of an 844px viewport),
+ * leaving a hard horizontal edge with plain background beneath it.
+ */
 .route-view {
   overflow-x: hidden;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.route-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 @keyframes route-in-fwd {
   from {
