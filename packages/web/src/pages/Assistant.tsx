@@ -68,7 +68,13 @@ function imageErrorMessage(err: unknown): string {
       return 'Photo analysis is not switched on for this server right now. Tell me what you can see and I will carry on from there.';
     case 'classify_failed':
     case 'identify_failed':
-      return `I could not read that image (${err.message}). Try again in better light, with the label or the injured area filling more of the frame.`;
+      // The server now distinguishes "your photo was unreadable" from "the
+      // server hit its Gemini quota" / "vision is misconfigured", and phrases
+      // each one safely. Wrapping all three in "I could not read that image"
+      // put the blame back on the user's camera for problems that were ours —
+      // which is exactly the behaviour that made a quota failure look like a
+      // bad photo in production. So the server's sentence is used verbatim.
+      return err.message;
     case 'invalid_request':
       return 'That file did not come through as a usable image. Try a JPG or PNG photo.';
     default:

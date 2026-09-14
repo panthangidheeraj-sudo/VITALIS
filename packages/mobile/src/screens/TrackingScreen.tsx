@@ -134,8 +134,7 @@ export function TrackingScreen({ caseId, onCancelled, onOpenCompanion, onOpenHan
               {match.hospital.address ?? 'Address not recorded in OpenStreetMap'}
             </Text>
             <Text style={styles.provenance}>
-              Coordinates, name and address from OpenStreetMap. Call ahead to confirm — bed
-              availability is not published anywhere and is never shown here.
+              Coordinates, name and address from OpenStreetMap. Call ahead to confirm details.
             </Text>
             {match.hospital.phone === undefined ? null : (
               <Text style={[type.mono, { marginTop: 10, color: colors.brand }]}>

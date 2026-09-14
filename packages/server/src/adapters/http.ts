@@ -39,6 +39,28 @@ export const SUPPLEMENTARY_POLICY: RetryPolicy = {
 };
 
 /**
+ * Timeout budget for VISION calls — reading a photo, not looking up a word.
+ *
+ * These were silently inheriting SUPPLEMENTARY_POLICY's 9 SECONDS, which is a
+ * sane ceiling for a text lookup against NIH and far too short for image
+ * inference: the request body is the whole photo (a phone camera JPEG is
+ * megabytes, ~33% more once base64-encoded), so the clock covers upload as
+ * well as the model's own work. Verified against the live API — a real vision
+ * call blew straight through the 9s cap and surfaced as "that photo could not
+ * be read", blaming the user's photo for what was a client-side stopwatch.
+ *
+ * ONE attempt, not two: a retry means re-uploading those megabytes and
+ * doubling a wait the user is already sitting through, for a request that is
+ * rarely transiently flaky in a way a second try fixes.
+ */
+export const VISION_POLICY: RetryPolicy = {
+  maxAttempts: 1,
+  baseDelayMs: 0,
+  maxDelayMs: 0,
+  timeoutMs: 30_000,
+};
+
+/**
  * Wikimedia's API policy requires a descriptive User-Agent identifying the
  * application; requests without one are rate-limited to the point of being
  * unusable (verified: HTTP 429 on the very first call). NIH's services do not

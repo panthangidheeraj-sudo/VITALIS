@@ -32,7 +32,7 @@ import type {
   ToolResult,
 } from '@triage/shared';
 import { VISIBLE_SIGNS, failedResult, liveResult, photoObservationSchema } from '@triage/shared';
-import { requestJson } from './http.js';
+import { requestJson, VISION_POLICY } from './http.js';
 import { DESCRIBE_INJURY_PHOTO_PROMPT } from './groq-prompts.js';
 
 export interface GeminiConfig {
@@ -125,6 +125,7 @@ export class GeminiVisionPort implements ReasoningPort {
             responseSchema: PHOTO_SCHEMA,
           },
         }),
+        policy: VISION_POLICY,
       },
     );
 

@@ -15,7 +15,7 @@ import type { KnowledgePort, MedicationPort } from '@triage/shared';
 import type { ChatTurn, GroqChatPort } from '../adapters/groq-chat-port.js';
 import type { GeminiConfig } from '../adapters/gemini-vision-port.js';
 import { classifyImage } from '../adapters/gemini-image-classify.js';
-import { identifyMedicine } from '../adapters/gemini-medicine-vision.js';
+import { describeVisionFailure, identifyMedicine } from '../adapters/gemini-medicine-vision.js';
 import { lookupMedicineInfo, USES_CAVEAT } from '../adapters/medicine-info.js';
 
 const imageSchema = z.object({
@@ -132,11 +132,9 @@ export function createAssistantRoutes(
         // Upstream detail is a server-side diagnostic. It named the provider
         // endpoint and, before http.ts started stripping query strings, the
         // API key with it — so the client gets a plain sentence either way.
-        console.warn(`[assistant/image] classify failed: ${classified.message}`);
-        res.status(502).json({
-          error: 'classify_failed',
-          message: 'That photo could not be read right now. Please try again in a moment.',
-        });
+        console.warn(`[assistant/image] classify failed (${classified.kind}): ${classified.message}`);
+        const described = describeVisionFailure(classified.kind);
+        res.status(502).json({ error: 'classify_failed', reason: described.reason, message: described.message });
         return;
       }
 
@@ -151,11 +149,9 @@ export function createAssistantRoutes(
 
       const identified = await identifyMedicine(gemini, parsed.data.photoRef);
       if (!identified.ok) {
-        console.warn(`[assistant/image] identify failed: ${identified.message}`);
-        res.status(502).json({
-          error: 'identify_failed',
-          message: 'That photo could not be read right now. Please try again in a moment.',
-        });
+        console.warn(`[assistant/image] identify failed (${identified.kind}): ${identified.message}`);
+        const described = describeVisionFailure(identified.kind);
+        res.status(502).json({ error: 'identify_failed', reason: described.reason, message: described.message });
         return;
       }
       const medicine = identified.data;

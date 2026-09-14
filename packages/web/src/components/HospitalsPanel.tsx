@@ -143,8 +143,7 @@ export function HospitalsPanel() {
       )}
       {status.kind === 'done' && status.hospitals.length > 0 && (
         <p className="foot" style={{ marginTop: 12, textAlign: 'center' }}>
-          Names, addresses and locations from OpenStreetMap. Call ahead to confirm — availability is not published
-          anywhere and is never shown here.
+          Names, addresses and locations from OpenStreetMap. Call ahead to confirm details.
         </p>
       )}
     </div>

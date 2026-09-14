@@ -22,7 +22,7 @@ import type { AgentTools } from '@triage/shared';
 import { degradationOf } from '@triage/shared';
 import { requestJson } from '../adapters/http.js';
 import type { GeminiConfig } from '../adapters/gemini-vision-port.js';
-import { identifyMedicine } from '../adapters/gemini-medicine-vision.js';
+import { describeVisionFailure, identifyMedicine } from '../adapters/gemini-medicine-vision.js';
 import { lookupMedicineInfo, USES_CAVEAT } from '../adapters/medicine-info.js';
 
 const lookupSchema = z.object({
@@ -97,11 +97,9 @@ export function createMedicationRoutes(tools: AgentTools, gemini?: GeminiConfig)
       if (!outcome.ok) {
         // Diagnostic stays server-side — see routes/assistant.ts's identical
         // guard for what the upstream message can contain.
-        console.warn(`[medications/identify] failed: ${outcome.message}`);
-        res.status(502).json({
-          error: 'identify_failed',
-          message: 'That photo could not be read right now. Please try again in a moment.',
-        });
+        console.warn(`[medications/identify] failed (${outcome.kind}): ${outcome.message}`);
+        const described = describeVisionFailure(outcome.kind);
+        res.status(502).json({ error: 'identify_failed', reason: described.reason, message: described.message });
         return;
       }
 

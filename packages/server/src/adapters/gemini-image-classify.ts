@@ -16,7 +16,8 @@
  */
 
 import type { GeminiConfig } from './gemini-vision-port.js';
-import { requestJson } from './http.js';
+import type { VisionFailure } from './gemini-medicine-vision.js';
+import { requestJson, VISION_POLICY } from './http.js';
 
 export type ImageKind = 'medicine' | 'injury' | 'other';
 
@@ -61,10 +62,10 @@ const DATA_URL = /^data:(image\/[a-z+]+);base64,(.+)$/i;
 export async function classifyImage(
   config: GeminiConfig,
   imageRef: string,
-): Promise<{ readonly ok: true; readonly data: ImageClassification } | { readonly ok: false; readonly message: string }> {
+): Promise<{ readonly ok: true; readonly data: ImageClassification } | VisionFailure> {
   const match = DATA_URL.exec(imageRef);
   if (match === null) {
-    return { ok: false, message: 'Photo must be supplied as a base64 data URL.' };
+    return { ok: false, message: 'Photo must be supplied as a base64 data URL.', kind: 'bad_request' };
   }
 
   const outcome = await requestJson<GeminiResponse>(
@@ -85,32 +86,39 @@ export async function classifyImage(
         ],
         generationConfig: { temperature: 0, responseMimeType: 'application/json', responseSchema: CLASSIFY_SCHEMA },
       }),
+      policy: VISION_POLICY,
     },
   );
 
   if (!outcome.ok || outcome.value === undefined) {
-    return { ok: false, message: outcome.error?.message ?? 'Gemini unreachable.' };
+    // The kind carries 429/401/timeout up to the route, which is what stops
+    // a quota failure being phrased as an unreadable photo.
+    return {
+      ok: false,
+      message: outcome.error?.message ?? 'Gemini unreachable.',
+      kind: outcome.error?.kind ?? 'unavailable',
+    };
   }
 
   const text = outcome.value.candidates?.[0]?.content?.parts?.[0]?.text;
   if (text === undefined) {
-    return { ok: false, message: 'Gemini returned no content.' };
+    return { ok: false, message: 'Gemini returned no content.', kind: 'invalid_response' };
   }
 
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch {
-    return { ok: false, message: 'Gemini returned non-JSON.' };
+    return { ok: false, message: 'Gemini returned non-JSON.', kind: 'invalid_response' };
   }
   if (typeof raw !== 'object' || raw === null) {
-    return { ok: false, message: 'Gemini returned an unexpected shape.' };
+    return { ok: false, message: 'Gemini returned an unexpected shape.', kind: 'invalid_response' };
   }
 
   const r = raw as Record<string, unknown>;
   const kind = r['kind'];
   if (kind !== 'medicine' && kind !== 'injury' && kind !== 'other') {
-    return { ok: false, message: 'Gemini returned an unknown image category.' };
+    return { ok: false, message: 'Gemini returned an unknown image category.', kind: 'invalid_response' };
   }
   return {
     ok: true,

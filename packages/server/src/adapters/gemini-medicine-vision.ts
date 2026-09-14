@@ -20,8 +20,71 @@
  * confident read on the wire.
  */
 
+import type { ToolErrorKind } from '@triage/shared';
 import type { GeminiConfig } from './gemini-vision-port.js';
-import { requestJson } from './http.js';
+import { requestJson, VISION_POLICY } from './http.js';
+
+/**
+ * Why a failure carries a KIND and not just a sentence.
+ *
+ * "Could not read that photo" is the correct thing to tell someone whose photo
+ * was blurry. It is the WRONG thing to tell someone whose photo was perfect and
+ * whose server had simply run out of Gemini quota — that hides an operational
+ * problem behind a message blaming the user's camera, and the operator never
+ * finds out. Verified in production: the deployed scanner was returning
+ * "could not be read" for an HTTP 429 `RESOURCE_EXHAUSTED`.
+ *
+ * The kind comes straight from `http.ts`'s existing classification, so a 429 is
+ * a 429 all the way up to the route that phrases it.
+ */
+export interface VisionFailure {
+  readonly ok: false;
+  readonly message: string;
+  readonly kind: ToolErrorKind;
+}
+
+/** A stable code the UI can branch on, alongside the sentence. */
+export type VisionFailureReason = 'rate_limited' | 'not_configured' | 'bad_image' | 'unavailable';
+
+/**
+ * Turns an internal failure into something safe AND accurate to show a user.
+ *
+ * Safe: no URL, no key, no status code, no upstream prose — the raw message is
+ * logged server-side instead.
+ *
+ * Accurate: each class says what actually went wrong. Telling someone their
+ * photo was unreadable when the server hit its daily Gemini quota sends them
+ * off to retake a perfectly good photo, repeatedly, while the real fix is an
+ * API plan. That was the live behaviour this function exists to end.
+ */
+export function describeVisionFailure(kind: ToolErrorKind): {
+  readonly reason: VisionFailureReason;
+  readonly message: string;
+} {
+  switch (kind) {
+    case 'rate_limited':
+      return {
+        reason: 'rate_limited',
+        message:
+          'Photo analysis has reached its limit for now — this is a limit on the VITALIS server, not a problem with your photo. Please try again later.',
+      };
+    case 'unauthorized':
+      return {
+        reason: 'not_configured',
+        message: 'Photo analysis is not set up correctly on this server. Your photo was fine — this needs an administrator.',
+      };
+    case 'bad_request':
+      return {
+        reason: 'bad_image',
+        message: 'That image format could not be read. Try a JPG or PNG photo.',
+      };
+    default:
+      return {
+        reason: 'unavailable',
+        message: 'That photo could not be read right now. Please try again in a moment.',
+      };
+  }
+}
 
 export interface MedicineIdentification {
   readonly productName: string | undefined;
@@ -91,10 +154,10 @@ const DATA_URL = /^data:(image\/[a-z+]+);base64,(.+)$/i;
 export async function identifyMedicine(
   config: GeminiConfig,
   imageRef: string,
-): Promise<{ readonly ok: true; readonly data: MedicineIdentification } | { readonly ok: false; readonly message: string }> {
+): Promise<{ readonly ok: true; readonly data: MedicineIdentification } | VisionFailure> {
   const match = DATA_URL.exec(imageRef);
   if (match === null) {
-    return { ok: false, message: 'Photo must be supplied as a base64 data URL.' };
+    return { ok: false, message: 'Photo must be supplied as a base64 data URL.', kind: 'bad_request' };
   }
 
   const outcome = await requestJson<GeminiResponse>(
@@ -115,27 +178,34 @@ export async function identifyMedicine(
         ],
         generationConfig: { temperature: 0.1, responseMimeType: 'application/json', responseSchema: MEDICINE_SCHEMA },
       }),
+      policy: VISION_POLICY,
     },
   );
 
   if (!outcome.ok || outcome.value === undefined) {
-    return { ok: false, message: outcome.error?.message ?? 'Gemini unreachable.' };
+    // The kind carries 429/401/timeout up to the route, which is what stops
+    // a quota failure being phrased as an unreadable photo.
+    return {
+      ok: false,
+      message: outcome.error?.message ?? 'Gemini unreachable.',
+      kind: outcome.error?.kind ?? 'unavailable',
+    };
   }
 
   const text = outcome.value.candidates?.[0]?.content?.parts?.[0]?.text;
   if (text === undefined) {
-    return { ok: false, message: 'Gemini returned no content.' };
+    return { ok: false, message: 'Gemini returned no content.', kind: 'invalid_response' };
   }
 
   let raw: unknown;
   try {
     raw = JSON.parse(text);
   } catch {
-    return { ok: false, message: 'Gemini returned non-JSON.' };
+    return { ok: false, message: 'Gemini returned non-JSON.', kind: 'invalid_response' };
   }
 
   if (typeof raw !== 'object' || raw === null) {
-    return { ok: false, message: 'Gemini returned an unexpected shape.' };
+    return { ok: false, message: 'Gemini returned an unexpected shape.', kind: 'invalid_response' };
   }
   const r = raw as Record<string, unknown>;
   const confidence = typeof r['confidence'] === 'number' ? Math.min(1, Math.max(0, r['confidence'])) : 0;
