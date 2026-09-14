@@ -177,8 +177,11 @@ export function FirstAid() {
       </a>
 
       <div className="stack fade-up" ref={stackRef} style={{ animationDelay: '210ms' }} tabIndex={0} onKeyDown={onKeyDown} aria-label="First aid topic, use arrow keys or swipe to switch">
-        <div className="stack-back" style={{ top: 16, left: '7%', width: '86%', height: 308, background: 'rgba(228,241,255,0.46)', zIndex: 0 }} />
-        <div className="stack-back" style={{ top: 8, left: '4%', width: '92%', height: 320, background: 'rgba(222,237,255,0.58)', zIndex: 1 }} />
+        {/* Anchored top AND bottom so the decorative layers stretch with the
+            card, rather than the fixed 308/320px heights they had when the
+            stack itself was a fixed 330px box. */}
+        <div className="stack-back" style={{ top: 16, bottom: -8, left: '7%', width: '86%', background: 'rgba(228,241,255,0.46)', zIndex: 0 }} />
+        <div className="stack-back" style={{ top: 8, bottom: -4, left: '4%', width: '92%', background: 'rgba(222,237,255,0.58)', zIndex: 1 }} />
 
         {/* A live peek of the adjacent topic, revealed proportionally to how
             far the drag has travelled — item 3's "next card becomes visible
@@ -218,7 +221,11 @@ export function FirstAid() {
             </div>
             <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 22, color: 'var(--ink)', letterSpacing: -0.3, marginRight: 50 }}>{active.title}</div>
             <p style={{ fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.45, marginTop: 5 }}>{active.whenToUse}</p>
-            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12, overflowY: 'auto', maxHeight: 190 }}>
+            {/* No `maxHeight`/`overflow-y` here any more: the steps list used
+                to be its own 190px scroller inside the card, which put a
+                scrollbar over the instructions and hid most of them. The card
+                grows and the page scrolls instead. */}
+            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 12 }}>
               {active.steps.map((step) => (
                 <div key={step.n} className="row" style={{ alignItems: 'flex-start', gap: 11 }}>
                   <span className="step-badge">

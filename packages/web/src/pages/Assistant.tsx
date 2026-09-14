@@ -412,8 +412,10 @@ export function Assistant() {
 
   const awaitingConfirmation = summary?.status === 'awaiting_confirmation' && summary.routing !== undefined;
 
+  // The bottom inset clears the composer AND the nav beneath it, so the last
+  // message can always be scrolled clear of both.
   return (
-    <div className="page" style={{ paddingBottom: 140, position: 'relative' }}>
+    <div className="page" style={{ paddingBottom: 'calc(178px + env(safe-area-inset-bottom, 0px))', position: 'relative' }}>
       <FloatingLines
         enabledWaves={['top', 'middle', 'bottom']}
         lineCount={[10, 15, 20]}
@@ -591,7 +593,9 @@ export function Assistant() {
           position: 'fixed',
           left: 0,
           right: 0,
-          bottom: 92,
+          // Clears the floating nav (72px tall, 18px off the bottom) plus the
+          // device inset, so the composer never sits on top of it.
+          bottom: 'calc(98px + env(safe-area-inset-bottom, 0px))',
           maxWidth: 480,
           margin: '0 auto',
           padding: '0 20px',
@@ -675,9 +679,17 @@ export function Assistant() {
               onChange={(e) => setDraft(e.target.value)}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
-              placeholder="Ask Vitalis anything about your health…"
+              // Shortened deliberately: the old copy needed ~237px and the
+              // field is ~212px at a 360px viewport once the camera button and
+              // send button have taken their share, so it was always clipped
+              // mid-word. This fits with room to spare at 360px.
+              placeholder="Ask Vitalis anything…"
               className="text-input"
-              style={{ flex: 1, border: 'none', background: 'transparent', padding: '13px 14px 13px 0', outline: 'none' }}
+              // `minWidth: 0` is what actually lets this shrink. A flex item
+              // defaults to `min-width: auto`, i.e. it refuses to go narrower
+              // than its content, which is how a long value pushes the send
+              // button off-screen at 360px instead of scrolling inside itself.
+              style={{ flex: 1, minWidth: 0, border: 'none', background: 'transparent', padding: '13px 14px 13px 0', outline: 'none' }}
             />
           </div>
         </div>

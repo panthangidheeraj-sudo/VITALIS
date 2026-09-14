@@ -440,7 +440,11 @@ textarea {
 
 .page {
   flex: 1;
-  padding: 20px 20px 130px;
+  /* The floating nav is 72px tall and sits 18px off the bottom, plus the
+     device's own inset (a phone's home indicator). 130px cleared the bar but
+     not comfortably, so the last item on a long page — the final CPR step —
+     ended up behind it. This clears the bar, the inset, and a readable gap. */
+  padding: 20px 20px calc(124px + env(safe-area-inset-bottom, 0px));
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -467,7 +471,8 @@ textarea {
   bottom: 0;
   display: flex;
   justify-content: center;
-  padding: 0 18px 18px;
+  /* Sits above the home indicator on phones that report an inset. */
+  padding: 0 18px calc(18px + env(safe-area-inset-bottom, 0px));
   z-index: 20;
 }
 
@@ -622,7 +627,8 @@ textarea {
 
 .stack {
   position: relative;
-  height: 330px;
+  /* Height comes from the card now (see `.stack-card`), instead of being
+     fixed at 330px and forcing the steps list into its own scroller. */
   margin-top: 2px;
 }
 
@@ -634,8 +640,13 @@ textarea {
 }
 
 .stack-card {
-  position: absolute;
-  inset: 0;
+  /* IN FLOW, not absolutely positioned. As `position: absolute; inset: 0` it
+     could not contribute height, so the stack needed a fixed 330px and the
+     steps list needed its own `overflow-y: auto` — the nested scrollbar. In
+     flow it simply grows with its content and the PAGE scrolls, which is what
+     a list of emergency instructions needs. The drag still works: it is a
+     `transform`, which applies the same either way. */
+  position: relative;
   border-radius: var(--radius-card);
   border: 1px solid rgba(255, 255, 255, 0.82);
   overflow: hidden;
@@ -1131,12 +1142,16 @@ textarea:focus-visible {
 }
 .sliding-capsule {
   position: absolute;
+  /* Top/height come from the measured item (see useSlidingCapsule.ts) rather
+     than being pinned to the rail, so a wrapped row cannot stretch the capsule
+     across two lines and cover the item below it. */
   top: 0;
-  bottom: 0;
+  left: 0;
   border-radius: var(--radius-pill);
   z-index: 0;
   pointer-events: none;
-  transition: transform var(--motion-base) var(--spring-snap), width var(--motion-base) var(--spring-snap), opacity var(--motion-fast) linear;
+  transition: transform var(--motion-base) var(--spring-snap), width var(--motion-base) var(--spring-snap),
+    height var(--motion-base) var(--spring-snap), opacity var(--motion-fast) linear;
 }
 
 /* --- Route (page) transitions (item 1) --------------------------------------
@@ -1174,11 +1189,29 @@ textarea:focus-visible {
     filter: blur(0);
   }
 }
+/*
+ * `backwards`, NOT `both`, and this matters far more than it looks.
+ *
+ * With `both`, the final keyframe's `transform: translateX(0)` is retained
+ * forever after the animation ends. A transform other than `none` makes an
+ * element the containing block for `position: fixed` DESCENDANTS — so the
+ * Assistant's fixed composer stopped resolving against the viewport and
+ * resolved against this pane instead, which is only as tall as its content.
+ * The composer therefore sat immediately below the last chat message,
+ * mid-screen, instead of above the navigation. (Not reproducible on a machine
+ * with reduced motion enabled, where this class is never applied at all —
+ * which is exactly why it survived testing.)
+ *
+ * `backwards` still applies the `from` state before the animation starts, so
+ * the entrance is unchanged; it simply does not retain the end state, and the
+ * end state here IS the natural one (opacity 1, no transform, no blur), so
+ * nothing moves when the fill is released.
+ */
 .route-pane[data-dir='fwd'] {
-  animation: route-in-fwd var(--motion-base) var(--ease-out) both;
+  animation: route-in-fwd var(--motion-base) var(--ease-out) backwards;
 }
 .route-pane[data-dir='back'] {
-  animation: route-in-back var(--motion-base) var(--ease-out) both;
+  animation: route-in-back var(--motion-base) var(--ease-out) backwards;
 }
 
 /* --- Assistant input — magnetic glass focus (item 9) ------------------------- */

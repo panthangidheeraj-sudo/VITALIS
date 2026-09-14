@@ -43,20 +43,30 @@ export function useSlidingCapsule(containerRef: RefObject<HTMLElement | null>, a
     const fRect = fromEl.getBoundingClientRect();
     let x = fRect.left - cRect.left;
     let w = fRect.width;
+    // The VERTICAL position is measured too, not assumed. The capsule used to
+    // be pinned `top: 0; bottom: 0`, which is only correct while every item
+    // sits on one line: once the rail wraps (First Aid's four categories wrap
+    // to two rows at 360px) that stretched the capsule across BOTH rows, so
+    // the blue pill behind "CPR" also covered "Burns" underneath it.
+    let y = fRect.top - cRect.top;
+    let h = fRect.height;
     const live = blend !== undefined && blend.t > 0 && blend.t < 1;
     if (blend !== undefined && blend.t > 0) {
       const toEl = itemRefs.current[blend.toKey];
       if (toEl != null) {
         const tRect = toEl.getBoundingClientRect();
-        const tx = tRect.left - cRect.left;
-        const tw = tRect.width;
-        x = x + (tx - x) * blend.t;
-        w = w + (tw - w) * blend.t;
+        x = x + (tRect.left - cRect.left - x) * blend.t;
+        w = w + (tRect.width - w) * blend.t;
+        // Interpolated as well, so a drag between items on DIFFERENT rows
+        // travels diagonally instead of sliding through the row it is in.
+        y = y + (tRect.top - cRect.top - y) * blend.t;
+        h = h + (tRect.height - h) * blend.t;
       }
     }
     setStyle({
-      transform: `translateX(${x}px)`,
+      transform: `translate(${x}px, ${y}px)`,
       width: w,
+      height: h,
       opacity: 1,
       transition: live ? 'none' : undefined,
     });
