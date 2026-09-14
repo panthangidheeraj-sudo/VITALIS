@@ -95,7 +95,13 @@ export function createMedicationRoutes(tools: AgentTools, gemini?: GeminiConfig)
 
       const outcome = await identifyMedicine(gemini, parsed.data.photoRef);
       if (!outcome.ok) {
-        res.status(502).json({ error: 'identify_failed', message: outcome.message });
+        // Diagnostic stays server-side — see routes/assistant.ts's identical
+        // guard for what the upstream message can contain.
+        console.warn(`[medications/identify] failed: ${outcome.message}`);
+        res.status(502).json({
+          error: 'identify_failed',
+          message: 'That photo could not be read right now. Please try again in a moment.',
+        });
         return;
       }
 

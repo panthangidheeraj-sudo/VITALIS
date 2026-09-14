@@ -111,6 +111,53 @@ export interface MedicationLookup {
   readonly interactionNotice: string;
 }
 
+export interface MedicineInfoSource {
+  readonly provider: 'rxnorm' | 'medlineplus' | 'dailymed' | 'model';
+  readonly title: string;
+  readonly url?: string;
+}
+
+/**
+ * What Gemini could actually READ off the pack. Every identity field is
+ * optional because "not legible" is a normal outcome — see the server's
+ * gemini-medicine-vision.ts for why nothing here is ever guessed at.
+ */
+export interface MedicineIdentification {
+  readonly productName?: string;
+  readonly genericName?: string;
+  readonly strength?: string;
+  readonly dosageForm?: string;
+  readonly expiryDateText?: string;
+  /** Several dates printed and none identifiable as the expiry. */
+  readonly expiryAmbiguous?: boolean;
+  readonly manufacturer?: string;
+  /** What it is commonly used for, preferring MedlinePlus over the model. */
+  readonly uses?: string;
+  readonly usesSource?: 'medlineplus' | 'model';
+  readonly usesCaveat?: string;
+  readonly cautions?: string;
+  readonly confidence: number;
+  readonly notes: string;
+}
+
+export interface ImageClassification {
+  readonly kind: 'medicine' | 'injury' | 'other';
+  readonly confidence: number;
+  readonly reason: string;
+}
+
+/** See `api.analyzeImage` for why only `medicine` carries a full answer. */
+export type AnalyzeImageResult =
+  | {
+      readonly kind: 'medicine';
+      readonly classification: ImageClassification;
+      readonly medicine: MedicineIdentification;
+      readonly sources?: readonly MedicineInfoSource[];
+      readonly narrative?: string;
+    }
+  | { readonly kind: 'injury'; readonly classification: ImageClassification }
+  | { readonly kind: 'other'; readonly classification: ImageClassification };
+
 /**
  * An emergency contact in the shape the server's notification layer expects.
  *
@@ -373,4 +420,21 @@ export const api = {
       readonly reply: string;
       readonly citation?: { readonly provider?: string; readonly title?: string; readonly url?: string };
     }>('/assistant/chat', { message, history }),
+
+  /**
+   * A photo from the Assistant composer.
+   *
+   * GROQ CANNOT SEE IMAGES — the account has no vision model, which is the
+   * whole reason `GeminiVisionPort` exists. So this does NOT go to
+   * `/assistant/chat`; it goes to `/assistant/image`, which runs Gemini.
+   *
+   * The server classifies first and the two answers differ in kind:
+   *   - `medicine` is resolved there and comes back complete, enriched from
+   *     RxNorm/MedlinePlus/DailyMed.
+   *   - `injury` comes back as a CLASSIFICATION ONLY. That is deliberate: an
+   *     injury photo has to become a real turn on a real case
+   *     (`submitPhoto`) so the deterministic scorer — not the vision model —
+   *     decides the risk tier. The caller opens a case and submits it.
+   */
+  analyzeImage: (photoRef: string) => request<AnalyzeImageResult>('/assistant/image', { photoRef }),
 };

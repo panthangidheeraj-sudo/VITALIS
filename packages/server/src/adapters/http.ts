@@ -55,6 +55,24 @@ export interface HttpOutcome<T> {
   readonly attempts: number;
 }
 
+/**
+ * The URL with its query string removed, for use in error messages.
+ *
+ * NOT cosmetic. Gemini authenticates by query parameter — every vision call is
+ * built as `...:generateContent?key=<GEMINI_API_KEY>` — so interpolating the
+ * raw URL into a ToolError put the live API key inside a message that routes
+ * then returned to the client. Verified against the running server: a Gemini
+ * 429 came back to the caller with the key in plain text.
+ *
+ * The path alone is all the diagnostic value there ever was; the query string
+ * is where the secrets live. Stripped here, once, rather than trusted to be
+ * stripped again at each of the call sites that format an error.
+ */
+function safeUrl(url: string): string {
+  const queryStart = url.indexOf('?');
+  return queryStart === -1 ? url : url.slice(0, queryStart);
+}
+
 /** Maps a status code onto the closed ToolErrorKind set. */
 function classify(status: number): { kind: ToolErrorKind; retryable: boolean } {
   if (status === 401 || status === 403) return { kind: 'unauthorized', retryable: false };
@@ -108,7 +126,7 @@ export async function requestText(
         const { kind, retryable } = classify(response.status);
         lastError = {
           kind,
-          message: `${url} responded ${response.status}`,
+          message: `${safeUrl(url)} responded ${response.status}`,
           httpStatus: response.status,
           retryable,
         };
@@ -129,8 +147,8 @@ export async function requestText(
       lastError = {
         kind: aborted ? 'timeout' : 'network',
         message: aborted
-          ? `${url} exceeded ${policy.timeoutMs}ms`
-          : `${url}: ${err instanceof Error ? err.message : 'unknown transport error'}`,
+          ? `${safeUrl(url)} exceeded ${policy.timeoutMs}ms`
+          : `${safeUrl(url)}: ${err instanceof Error ? err.message : 'unknown transport error'}`,
         retryable: true,
       };
       if (!shouldRetry(lastError, attempts, policy)) break;
@@ -156,7 +174,7 @@ export async function requestJson<T>(
       ok: false,
       error: {
         kind: 'invalid_response',
-        message: `${url} returned a body that is not valid JSON`,
+        message: `${safeUrl(url)} returned a body that is not valid JSON`,
         retryable: false,
       },
       latencyMs: outcome.latencyMs,

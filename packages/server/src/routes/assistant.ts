@@ -129,7 +129,14 @@ export function createAssistantRoutes(
 
       const classified = await classifyImage(gemini, parsed.data.photoRef);
       if (!classified.ok) {
-        res.status(502).json({ error: 'classify_failed', message: classified.message });
+        // Upstream detail is a server-side diagnostic. It named the provider
+        // endpoint and, before http.ts started stripping query strings, the
+        // API key with it — so the client gets a plain sentence either way.
+        console.warn(`[assistant/image] classify failed: ${classified.message}`);
+        res.status(502).json({
+          error: 'classify_failed',
+          message: 'That photo could not be read right now. Please try again in a moment.',
+        });
         return;
       }
 
@@ -144,7 +151,11 @@ export function createAssistantRoutes(
 
       const identified = await identifyMedicine(gemini, parsed.data.photoRef);
       if (!identified.ok) {
-        res.status(502).json({ error: 'identify_failed', message: identified.message });
+        console.warn(`[assistant/image] identify failed: ${identified.message}`);
+        res.status(502).json({
+          error: 'identify_failed',
+          message: 'That photo could not be read right now. Please try again in a moment.',
+        });
         return;
       }
       const medicine = identified.data;

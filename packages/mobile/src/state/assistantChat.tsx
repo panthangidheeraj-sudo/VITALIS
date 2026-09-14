@@ -45,6 +45,21 @@ export interface AssistantMessage {
   readonly text: string;
   readonly meta?: string;
   readonly handoff?: boolean;
+  /**
+   * Local `file://` uri of a photo sent with this message, for the thumbnail
+   * in the thread. NEVER the base64 data url — that is megabytes per image and
+   * would sit in memory for the life of the conversation; it is handed to the
+   * API call and dropped.
+   */
+  readonly imageUri?: string;
+}
+
+/** A photo chosen but not yet sent. Cleared on send, on remove, and on cancel. */
+export interface PendingImage {
+  /** `file://` uri, for the preview. */
+  readonly uri: string;
+  /** `data:image/...;base64,...`, which is what the server's vision path takes. */
+  readonly dataUrl: string;
 }
 
 interface AssistantChatState {
@@ -54,6 +69,9 @@ interface AssistantChatState {
   ) => void;
   readonly draft: string;
   readonly setDraft: (draft: string) => void;
+  /** Lives here, not in the screen, for the same reason the draft text does. */
+  readonly pendingImage: PendingImage | undefined;
+  readonly setPendingImage: (image: PendingImage | undefined) => void;
   readonly handoffPending: boolean;
   readonly setHandoffPending: (v: boolean) => void;
   /** The case this conversation opened, once a clinical message has fired. */
@@ -72,12 +90,24 @@ export function AssistantChatProvider({
 }) {
   const [messages, setMessages] = useState<readonly AssistantMessage[]>([opening]);
   const [draft, setDraft] = useState('');
+  const [pendingImage, setPendingImage] = useState<PendingImage | undefined>(undefined);
   const [handoffPending, setHandoffPending] = useState(false);
   const [caseId, setCaseId] = useState<CaseId | undefined>(undefined);
 
   const value = useMemo<AssistantChatState>(
-    () => ({ messages, setMessages, draft, setDraft, handoffPending, setHandoffPending, caseId, setCaseId }),
-    [messages, draft, handoffPending, caseId],
+    () => ({
+      messages,
+      setMessages,
+      draft,
+      setDraft,
+      pendingImage,
+      setPendingImage,
+      handoffPending,
+      setHandoffPending,
+      caseId,
+      setCaseId,
+    }),
+    [messages, draft, pendingImage, handoffPending, caseId],
   );
 
   return <AssistantChatContext.Provider value={value}>{children}</AssistantChatContext.Provider>;

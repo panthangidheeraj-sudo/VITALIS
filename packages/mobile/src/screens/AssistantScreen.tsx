@@ -44,11 +44,28 @@
  * exact component EmergencyScreen uses — renders inline here too, calling the
  * same `api.confirm`.
  *
- * NO CAMERA HERE, DELIBERATELY. Injury photography (§5.7) attaches to a case
- * that already exists and is reached from the full triage view
- * (`PhotoInjuryScreen`) — a camera icon in general chat implied photo-based
- * diagnosis with no case behind it, which is exactly the capability this
- * screen exists to refuse.
+ * THE CAMERA HERE OBEYS THE SAME RULE AS THE TEXT GATE ABOVE.
+ *
+ * This screen previously had no camera at all, on the grounds that a camera in
+ * general chat implies photo-based diagnosis with no case behind it — the exact
+ * capability the screen exists to refuse. The composer now has one, and that
+ * objection is answered by ROUTING rather than by absence:
+ *
+ *   - The server classifies the photo first (`/assistant/image`, Gemini).
+ *   - A MEDICINE pack is a lookup, not a clinical judgement, so it is answered
+ *     right here, grounded in RxNorm/MedlinePlus/DailyMed.
+ *   - An INJURY is never answered here. It opens (or continues) a real case and
+ *     is submitted as a `photo` turn through the same `api.submitPhoto`
+ *     PhotoInjuryScreen uses, so the vision model contributes an OBSERVATION
+ *     and the deterministic scorer — not the image — sets the risk tier.
+ *
+ * So a photo of a wound still cannot produce a tier without a case behind it.
+ * It just no longer requires the user to know that in advance and go find the
+ * right screen.
+ *
+ * GROQ CANNOT SEE IMAGES. The account has no vision model, which is why
+ * `GeminiVisionPort` exists server-side. Nothing on this screen sends an image
+ * to `/assistant/chat`; photos go to the Gemini-backed endpoints or nowhere.
  *
  * CHAT STATE — MESSAGES AND THE OPEN CASE ID — LIVES IN A PROVIDER, NOT HERE.
  * App.tsx unmounts every screen that is not the active one, so a `useState`
@@ -58,6 +75,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActionSheetIOS,
+  Alert,
+  Image,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -68,13 +88,15 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import Svg, { Circle, Path } from 'react-native-svg';
 import type { CaseId } from '@triage/shared';
 import { WaveField } from '../ui/WaveField';
 import { HoldDial } from '../components/HoldDial';
 import { Label, PrimaryButton } from '../ui/primitives';
 import { Pulse } from '../ui/motion';
 import { Wordmark } from '../ui/Chrome';
-import { useAssistantChat } from '../state/assistantChat';
+import { useAssistantChat, type PendingImage } from '../state/assistantChat';
 import { api, ApiError, type TurnResponse } from '../api/client';
 import { FALLBACK_DEMOGRAPHICS, useProfile } from '../data/profileStore';
 import { toNotifiableContacts } from '../data/notifiableContacts';
@@ -106,6 +128,38 @@ function needsTriage(text: string): boolean {
   return ESCALATE_TERMS.some((term) => lower.includes(term));
 }
 
+/**
+ * Turns a picked asset into what the server's vision path takes.
+ *
+ * `base64: true` is requested at pick time rather than read from the file
+ * afterwards, because expo-image-picker already has the bytes and a second
+ * filesystem read is both slower and one more failure mode. `quality: 0.6`
+ * keeps a phone photo comfortably under the server's 10 MB JSON body limit —
+ * base64 adds roughly a third on top of the encoded size.
+ */
+function toDataUrl(asset: ImagePicker.ImagePickerAsset): PendingImage | undefined {
+  if (asset.base64 === undefined || asset.base64 === null) return undefined;
+  return { uri: asset.uri, dataUrl: `data:${asset.mimeType ?? 'image/jpeg'};base64,${asset.base64}` };
+}
+
+const PICKER_OPTIONS = { base64: true, quality: 0.6, allowsEditing: false } as const;
+
+/** Same stroke weight and brand tint as the nav glyphs in `ui/Chrome.tsx`. */
+function CameraGlyph() {
+  return (
+    <Svg width={21} height={21} viewBox="0 0 24 24" fill="none">
+      <Path
+        d="M21.44 7.11L19.5 4.54a1.86 1.86 0 00-1.49-.75H5.98c-.59 0-1.12.28-1.48.75L2.55 7.11a1.88 1.88 0 00-.39 1.15v10.1c0 1.05.85 1.9 1.9 1.9h15.86c1.05 0 1.9-.85 1.9-1.9V8.26c0-.43-.14-.84-.38-1.15z"
+        stroke={colors.brand}
+        strokeWidth={1.7}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Circle cx={12} cy={12.5} r={3.6} stroke={colors.brand} strokeWidth={1.7} />
+    </Svg>
+  );
+}
+
 export function AssistantScreen({
   onOpenFullCase,
 }: {
@@ -113,7 +167,8 @@ export function AssistantScreen({
    * picker, the tool-call ledger — none of which chat has room to duplicate. */
   readonly onOpenFullCase: (caseId: CaseId) => void;
 }) {
-  const { messages, setMessages, draft, setDraft, caseId, setCaseId } = useAssistantChat();
+  const { messages, setMessages, draft, setDraft, pendingImage, setPendingImage, caseId, setCaseId } =
+    useAssistantChat();
   const scroller = useRef<ScrollView>(null);
   const [busy, setBusy] = useState(false);
   const { profile } = useProfile();
@@ -190,8 +245,172 @@ export function AssistantScreen({
     [appendAgent],
   );
 
+  /**
+   * Permissions are requested HERE, from the user's tap, and never on mount —
+   * an app that asks for the camera the moment a chat screen opens teaches
+   * people to deny it. Each path asks for only the permission it needs:
+   * taking a photo does not require library access, and vice versa.
+   */
+  const takePhoto = useCallback(async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        'Camera permission needed',
+        "VITALIS needs camera access to take a photo. You can enable it in your phone's Settings.",
+      );
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync(PICKER_OPTIONS);
+    if (result.canceled || result.assets.length === 0) return;
+    const picked = toDataUrl(result.assets[0]!);
+    if (picked === undefined) {
+      Alert.alert('Could not read that photo', 'Try taking it again.');
+      return;
+    }
+    setPendingImage(picked);
+  }, [setPendingImage]);
+
+  const choosePhoto = useCallback(async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert(
+        'Photo access needed',
+        "VITALIS needs access to your photos to attach one. You can enable it in your phone's Settings.",
+      );
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      ...PICKER_OPTIONS,
+      mediaTypes: ['images'],
+    });
+    if (result.canceled || result.assets.length === 0) return;
+    const picked = toDataUrl(result.assets[0]!);
+    if (picked === undefined) {
+      Alert.alert('Could not read that photo', 'Try a different one.');
+      return;
+    }
+    setPendingImage(picked);
+  }, [setPendingImage]);
+
+  /** iOS gets its native sheet; Android gets the three-button Alert, which is
+   * that platform's equivalent rather than a custom modal to maintain. */
+  const attachPhoto = useCallback(() => {
+    if (busy) return;
+    Keyboard.dismiss();
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        { options: ['Take photo', 'Choose from library', 'Cancel'], cancelButtonIndex: 2, title: 'Add a photo' },
+        (index) => {
+          if (index === 0) void takePhoto();
+          if (index === 1) void choosePhoto();
+        },
+      );
+      return;
+    }
+    Alert.alert('Add a photo', 'A medicine pack, or the injured area — VITALIS works out which it is.', [
+      { text: 'Take photo', onPress: () => void takePhoto() },
+      { text: 'Choose from library', onPress: () => void choosePhoto() },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }, [busy, choosePhoto, takePhoto]);
+
+  /**
+   * Sends the attached photo. See the file header for why the two outcomes
+   * are handled so differently: a medicine is answered here; an injury is
+   * escalated onto a real case so the deterministic scorer owns the tier.
+   */
+  const sendImage = useCallback(
+    async (image: PendingImage, caption: string) => {
+      setPendingImage(undefined);
+      setDraft('');
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `u${Date.now()}`,
+          who: 'user' as const,
+          text: caption.length > 0 ? caption : 'Sent a photo',
+          imageUri: image.uri,
+        },
+      ]);
+      requestAnimationFrame(() => scroller.current?.scrollToEnd({ animated: true }));
+
+      setBusy(true);
+      try {
+        const analysis = await api.analyzeImage(image.dataUrl);
+
+        if (analysis.kind === 'other') {
+          appendAgent(
+            `That does not look like a medicine pack or an injury — ${analysis.classification.reason} Try a photo of the packaging, or of the injured area itself.`,
+          );
+          return;
+        }
+
+        if (analysis.kind === 'medicine') {
+          const m = analysis.medicine;
+          if (m.productName === undefined) {
+            appendAgent(
+              `Medicine identity could not be confirmed. ${m.notes}`,
+              'Try again with the front of the pack in focus and good light',
+            );
+            return;
+          }
+          const lines = [
+            m.strength === undefined ? m.productName : `${m.productName} ${m.strength}`,
+            m.uses === undefined ? undefined : `\nCommonly used for: ${m.uses}`,
+            m.expiryDateText !== undefined
+              ? `\nExpiry: ${m.expiryDateText}`
+              : m.expiryAmbiguous === true
+                ? '\nExpiry: several dates are printed — please check the pack.'
+                : '\nExpiry: not clearly visible — please verify on the package.',
+            m.manufacturer === undefined ? undefined : `\nManufacturer: ${m.manufacturer}`,
+          ].filter((l): l is string => l !== undefined);
+
+          // Provenance travels with the text: MedlinePlus and the model are
+          // never allowed to look like the same thing.
+          const cited = (analysis.sources ?? []).map((s) => s.title).join(' · ');
+          appendAgent(
+            lines.join(''),
+            m.usesSource === 'medlineplus' && cited.length > 0
+              ? `Sources: ${cited}`
+              : m.uses !== undefined
+                ? 'General information from VITALIS — no matching NIH page for this name. Verify with a pharmacist.'
+                : undefined,
+          );
+          return;
+        }
+
+        // INJURY. Never answered here — it becomes a turn on a real case.
+        const id = caseId ?? (await openCase());
+        if (caseId === undefined) {
+          appendAgent(
+            'That looks like an injury, so I am opening a case — the photo becomes part of it, and everything from here is tracked and scored properly.',
+            'Case opened · photo added as an observation',
+          );
+        }
+        const turn = await api.submitPhoto(id, image.dataUrl);
+        applyTurn(turn);
+      } catch (err) {
+        appendAgent(
+          err instanceof ApiError
+            ? err.message
+            : 'Could not analyse that photo. Try again, or describe what you can see instead.',
+        );
+      } finally {
+        setBusy(false);
+      }
+    },
+    [appendAgent, applyTurn, caseId, openCase, setDraft, setMessages, setPendingImage],
+  );
+
   const send = useCallback(async () => {
     const text = draft.trim();
+    // A photo on its own is a valid message; text is optional when one is
+    // attached, which is why this guard checks both.
+    if (pendingImage !== undefined) {
+      if (busy) return;
+      void sendImage(pendingImage, text);
+      return;
+    }
     if (text.length === 0 || busy) return;
     setDraft('');
     setMessages((prev) => [...prev, { id: `u${Date.now()}`, who: 'user' as const, text }]);
@@ -258,7 +477,7 @@ export function AssistantScreen({
     } finally {
       setBusy(false);
     }
-  }, [applyTurn, appendAgent, busy, caseId, draft, messages, openCase, setDraft, setMessages]);
+  }, [applyTurn, appendAgent, busy, caseId, draft, messages, openCase, pendingImage, sendImage, setDraft, setMessages]);
 
   const confirm = useCallback(
     async (heldMs: number) => {
@@ -328,6 +547,11 @@ export function AssistantScreen({
             key={message.id}
             style={[styles.row, message.who === 'user' ? styles.rowUser : styles.rowAgent]}
           >
+            {message.imageUri === undefined ? null : (
+              <View style={styles.sentImageWrap}>
+                <Image source={{ uri: message.imageUri }} style={styles.sentImage} />
+              </View>
+            )}
             <View style={message.who === 'user' ? styles.userBubble : styles.agentBubble}>
               <Text style={message.who === 'user' ? styles.userText : styles.agentText}>
                 {message.text}
@@ -363,7 +587,35 @@ export function AssistantScreen({
         ) : null}
       </ScrollView>
 
+      {/* Preview sits ABOVE the composer row so attaching a photo never
+          reflows the camera/input/send line the user is aiming at. */}
+      {pendingImage === undefined ? null : (
+        <View style={styles.previewRow}>
+          <View style={styles.previewCard}>
+            <Image source={{ uri: pendingImage.uri }} style={styles.previewImage} />
+            <Pressable
+              onPress={() => setPendingImage(undefined)}
+              accessibilityRole="button"
+              accessibilityLabel="Remove photo"
+              hitSlop={8}
+              style={styles.previewRemove}
+            >
+              <Text style={styles.previewRemoveGlyph}>✕</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.previewHint}>Photo attached · add a note, or send it on its own</Text>
+        </View>
+      )}
+
       <View style={styles.composer}>
+        <Pressable
+          onPress={attachPhoto}
+          accessibilityRole="button"
+          accessibilityLabel="Add a photo"
+          style={({ pressed }) => [styles.cameraButton, pressed ? { transform: [{ scale: 0.92 }] } : null]}
+        >
+          <CameraGlyph />
+        </Pressable>
         <View style={styles.inputWrap}>
           <TextInput
             value={draft}
@@ -485,6 +737,40 @@ const styles = StyleSheet.create({
   },
   fullCaseLink: { fontFamily: fonts.sansSemi, fontSize: 12, color: colors.brand },
 
+  // The shadow lives on a wrapping View, not on the Image: `shadow()` returns
+  // a ViewStyle, and RN's ImageStyle is a narrower type that rejects it.
+  sentImageWrap: {
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.9)',
+    overflow: 'hidden',
+    ...shadow('card'),
+  },
+  sentImage: { width: 168, height: 126 },
+
+  previewRow: { paddingHorizontal: spacing.xxl, gap: 6 },
+  previewCard: {
+    alignSelf: 'flex-start',
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.95)',
+    ...shadow('card'),
+  },
+  previewImage: { width: 62, height: 62, borderRadius: radius.lg },
+  previewRemove: {
+    position: 'absolute',
+    top: -6,
+    left: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(20,39,68,0.82)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  previewRemoveGlyph: { fontFamily: fonts.sansBold, fontSize: 10, color: colors.white, lineHeight: 13 },
+  previewHint: { fontFamily: fonts.sans, fontSize: 10.5, color: colors.label },
+
   composer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -492,6 +778,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xxl,
     paddingTop: spacing.md,
     paddingBottom: spacing.xl,
+  },
+  /** Same glass treatment as `inputWrap`, sized to match `sendButton`, so the
+   * composer reads as one row of three consistent surfaces. */
+  cameraButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: 'rgba(255,255,255,0.86)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.95)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...shadow('card'),
   },
   inputWrap: {
     flex: 1,
