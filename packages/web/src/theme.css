@@ -298,6 +298,17 @@ textarea {
   box-shadow: 0 3px 10px rgba(23, 105, 232, 0.28);
 }
 
+/* First Aid's category row is capsule-driven (a `.sliding-capsule` supplies
+   the moving blue background — see FirstAid.tsx), so the selected pill's
+   OWN background is dropped there specifically, scoped to this row so
+   Emergency's independent multi-select symptom tags (also `.pill.selected`,
+   never capsule-driven) are untouched. */
+.pill-row .pill.selected {
+  background: transparent;
+  box-shadow: none;
+  border-color: transparent;
+}
+
 .pill.critical:not(.selected) {
   border-color: rgba(220, 38, 38, 0.35);
 }
@@ -507,7 +518,8 @@ textarea {
 }
 
 .nav-item.active {
-  background: rgba(205, 225, 255, 0.58);
+  /* Background now comes from the sliding `.nav-capsule` element (a physical
+     glass object that travels), not a per-item class toggle — see Nav.tsx. */
   color: var(--primary);
 }
 
@@ -777,13 +789,33 @@ textarea:focus-visible {
   .orb-status,
   .count-up,
   .glass-loading .dot-beat,
-  .attn-pulse {
+  .attn-pulse,
+  .glass-emerge,
+  .glass-emerge-fast,
+  .route-pane,
+  .stack-card,
+  .msg-in,
+  .highlight-sweep::after,
+  .intro-ring,
+  .intro-logo,
+  .intro-heartbeat path,
+  .intro-wordmark,
+  .intro-status {
     animation: none !important;
   }
   .fade-up,
-  .count-up {
-    opacity: 1;
-    transform: none;
+  .count-up,
+  .glass-emerge,
+  .glass-emerge-fast,
+  .route-pane,
+  .stack-card,
+  .msg-in,
+  .intro-logo,
+  .intro-wordmark,
+  .intro-status {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
   }
   .floating-lines {
     display: none;
@@ -794,8 +826,19 @@ textarea:focus-visible {
   .nav-item,
   .add-pill,
   .call-banner,
-  .stack-card {
+  .stack-card,
+  .sliding-capsule,
+  .assistant-input-wrap,
+  .send-btn,
+  .nav-item svg,
+  .pill svg {
     transition: none !important;
+  }
+  .intro-overlay {
+    transition: none !important;
+  }
+  .highlight-sweep::after {
+    display: none;
   }
 }
 
@@ -1032,4 +1075,410 @@ textarea:focus-visible {
   justify-content: center;
   flex: none;
   margin-top: 1px;
+}
+
+/* ============================================================================
+   VITALIS MOTION SYSTEM
+   ----------------------------------------------------------------------------
+   One shared set of spring/ease tokens and reusable animation primitives.
+   Every new interaction added in this pass (page transitions, the nav
+   capsule, the First Aid gesture, glass emergence, the intro) draws from
+   THESE tokens instead of inventing its own easing per component — the goal
+   named in the brief: "a component should feel like it belongs to the same
+   animation language as every other component."
+   ============================================================================ */
+
+:root {
+  /* Settle, no overshoot — the value already used ad hoc throughout this
+     file (card-pop, orb-*, count-up); named here so new code reuses it
+     instead of retyping the bezier. */
+  --spring: cubic-bezier(0.22, 1, 0.36, 1);
+  /* A hair of overshoot for things that physically TRAVEL (the nav capsule,
+     a pill capsule sliding between tabs) — reads as a small glass object
+     settling into place, not a bounce. */
+  --spring-snap: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --motion-fast: 160ms;
+  --motion-base: 260ms;
+  --motion-slow: 380ms;
+}
+
+/* --- Glass emergence — major card entrance (item 6) -------------------------
+   Not a fade: blur resolves, scale settles to 1, position settles to final —
+   "the glass surface emerging from the atmosphere," not flying in. */
+@keyframes glass-emerge {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.965);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+.glass-emerge {
+  animation: glass-emerge var(--motion-slow) var(--spring) both;
+}
+.glass-emerge-fast {
+  animation: glass-emerge 220ms var(--spring) both;
+}
+
+/* --- Sliding capsule (shared by the bottom nav and First Aid's pill row) ---- */
+.capsule-rail {
+  position: relative;
+}
+.sliding-capsule {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: var(--radius-pill);
+  z-index: 0;
+  pointer-events: none;
+  transition: transform var(--motion-base) var(--spring-snap), width var(--motion-base) var(--spring-snap), opacity var(--motion-fast) linear;
+}
+
+/* --- Route (page) transitions (item 1) --------------------------------------
+   Entrance-only, deliberately: the alternative (rendering outgoing AND
+   incoming routes simultaneously via two <Routes> trees) risks exactly the
+   horizontal-overflow / layout-collapse bugs section 23 calls out, for a
+   marginal gain over a well-executed entrance direction. The background
+   atmosphere (.bg-glow, the page wash) lives OUTSIDE this wrapper in App.tsx
+   and is never remounted by route changes — that is what keeps it
+   continuous underneath the transition. */
+.route-view {
+  overflow-x: hidden;
+}
+@keyframes route-in-fwd {
+  from {
+    opacity: 0;
+    transform: translateX(22px) scale(0.99);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+@keyframes route-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-22px) scale(0.99);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+.route-pane[data-dir='fwd'] {
+  animation: route-in-fwd var(--motion-base) var(--ease-out) both;
+}
+.route-pane[data-dir='back'] {
+  animation: route-in-back var(--motion-base) var(--ease-out) both;
+}
+
+/* --- Assistant input — magnetic glass focus (item 9) ------------------------- */
+.assistant-input-wrap {
+  border-radius: var(--radius-pill);
+  transition: box-shadow var(--motion-base) var(--spring), background var(--motion-base) var(--spring);
+}
+.assistant-input-wrap.focused {
+  box-shadow: 0 0 0 4px rgba(23, 105, 232, 0.12), 0 14px 30px rgba(23, 105, 232, 0.2);
+}
+.assistant-input-wrap.focused .text-input {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(23, 105, 232, 0.55);
+}
+.send-btn {
+  transition: transform var(--motion-fast) var(--spring), box-shadow var(--motion-base) var(--spring);
+}
+.send-btn:active:not(:disabled) {
+  transform: scale(0.9);
+}
+
+/* --- Assistant response emergence (item 10) ----------------------------------
+   Not a typewriter — the text is readable immediately. Only the container
+   settles into place, once, the moment it mounts. */
+@keyframes msg-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+.msg-in {
+  animation: msg-in 0.3s var(--spring) both;
+}
+
+/* --- First Aid gesture card stack (items 3/4/5/12) ---------------------------
+   `.stack` gets `overflow: hidden` here specifically so a live drag never
+   produces real page horizontal scroll — the card is free to translate
+   past the container edge, but it is clipped there, never the viewport. */
+.stack {
+  overflow: hidden;
+  touch-action: pan-y;
+}
+.stack-card {
+  cursor: grab;
+  will-change: transform;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.stack-card:active {
+  cursor: grabbing;
+}
+@keyframes stack-card-in-fwd {
+  from {
+    opacity: 0;
+    transform: translateX(70px) scale(0.97);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+@keyframes stack-card-in-back {
+  from {
+    opacity: 0;
+    transform: translateX(-70px) scale(0.97);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    filter: blur(0);
+  }
+}
+.stack-card[data-dir='fwd'] {
+  animation: stack-card-in-fwd 0.32s var(--spring) both;
+}
+.stack-card[data-dir='back'] {
+  animation: stack-card-in-back 0.32s var(--spring) both;
+}
+.stack-peek {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.7);
+}
+
+/* --- Glass highlight sweep (item 14A) — used sparingly, First Aid card switch only */
+@keyframes highlight-sweep {
+  from {
+    transform: translateX(-130%) skewX(-14deg);
+    opacity: 0;
+  }
+  18% {
+    opacity: 0.55;
+  }
+  to {
+    transform: translateX(230%) skewX(-14deg);
+    opacity: 0;
+  }
+}
+.highlight-sweep {
+  position: relative;
+  overflow: hidden;
+}
+.highlight-sweep::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 38%;
+  height: 100%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  animation: highlight-sweep 800ms ease-out both;
+  pointer-events: none;
+}
+
+/* --- Nav / pill icon micro-motion (item 14C) --------------------------------- */
+.nav-item svg,
+.pill svg {
+  transition: transform var(--motion-base) var(--spring);
+}
+.nav-item.active svg {
+  transform: translateY(-1px) scale(1.08);
+}
+
+/* --- Intro splash (item 17) ---------------------------------------------------- */
+.intro-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background:
+    radial-gradient(900px 600px at 8% -5%, rgba(23, 105, 232, 0.14), transparent 60%),
+    radial-gradient(700px 520px at 96% 12%, rgba(56, 140, 255, 0.13), transparent 62%),
+    linear-gradient(#f4f8fd, #dfeafb);
+  transition: opacity 420ms ease;
+}
+.intro-overlay.intro-hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.intro-rings {
+  position: absolute;
+  width: 260px;
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.intro-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(23, 105, 232, 0.22);
+  opacity: 0;
+  animation: intro-ring-out 1.6s var(--ease-out) both;
+}
+.intro-ring-1 {
+  width: 120px;
+  height: 120px;
+  animation-delay: 1000ms;
+}
+.intro-ring-2 {
+  width: 190px;
+  height: 190px;
+  animation-delay: 1130ms;
+}
+.intro-ring-3 {
+  width: 260px;
+  height: 260px;
+  animation-delay: 1260ms;
+}
+@keyframes intro-ring-out {
+  from {
+    opacity: 0.5;
+    transform: scale(0.75);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+}
+.intro-logo-wrap {
+  position: relative;
+  width: 84px;
+  height: 84px;
+}
+.intro-logo {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  border-radius: 21px;
+  opacity: 0;
+  animation: intro-logo-in 0.6s var(--spring) 220ms both;
+  transition: transform 520ms var(--spring), opacity 420ms ease;
+}
+@keyframes intro-logo-in {
+  from {
+    opacity: 0;
+    transform: scale(0.88);
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+.intro-heartbeat {
+  position: absolute;
+  inset: 0;
+  width: 84px;
+  height: 84px;
+}
+.intro-heartbeat path {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 3.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 220;
+  stroke-dashoffset: 220;
+  opacity: 0;
+  animation: intro-heartbeat-draw 550ms ease-out 820ms forwards, intro-heartbeat-fade-in 1ms 820ms forwards, intro-heartbeat-fade-out 260ms ease-in 1550ms forwards;
+}
+@keyframes intro-heartbeat-fade-in {
+  to {
+    opacity: 0.92;
+  }
+}
+@keyframes intro-heartbeat-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes intro-heartbeat-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+.intro-wordmark {
+  font-family: var(--font-sans);
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 2px;
+  color: var(--ink);
+  opacity: 0;
+  animation: intro-wordmark-in 0.5s var(--spring) 1500ms both;
+}
+@keyframes intro-wordmark-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.intro-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  opacity: 0;
+  animation: intro-wordmark-in 0.4s ease 1750ms both;
+}
+.intro-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+  transition: background 220ms ease;
+}
+.intro-status-dot.ready {
+  background: var(--ok);
+}
+.intro-brief .intro-logo {
+  animation: intro-logo-in 0.32s var(--spring) both;
+}
+.intro-brief .intro-wordmark {
+  animation: intro-wordmark-in 0.32s var(--spring) 60ms both;
 }

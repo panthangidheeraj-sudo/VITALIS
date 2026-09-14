@@ -23,6 +23,7 @@ import { degradationOf } from '@triage/shared';
 import { requestJson } from '../adapters/http.js';
 import type { GeminiConfig } from '../adapters/gemini-vision-port.js';
 import { identifyMedicine } from '../adapters/gemini-medicine-vision.js';
+import { lookupMedicineInfo, USES_CAVEAT } from '../adapters/medicine-info.js';
 
 const lookupSchema = z.object({
   /** Names as read off the packaging, or typed by the patient. */
@@ -98,21 +99,33 @@ export function createMedicationRoutes(tools: AgentTools, gemini?: GeminiConfig)
         return;
       }
 
-      // Best-effort RxNorm normalisation of whatever name was actually read
-      // off the label - never a substitute for the vision read, only extra
-      // context. Skipped entirely when nothing legible was extracted, since
-      // there is nothing to normalise.
-      let normalized: unknown;
-      if (outcome.data.productName !== undefined) {
-        const norm = await tools.medication.normalize([outcome.data.productName]);
-        if (norm.ok) {
-          normalized = norm.data;
-        }
-      }
+      // Trusted-source enrichment (RxNorm → MedlinePlus → DailyMed), the same
+      // lookup the Assistant's camera path uses, so the standalone scanner and
+      // the chat flow can never disagree about what a medicine is used for.
+      // Skipped when nothing legible was extracted — there is nothing to look
+      // up, and searching on a guess would launder it into a citation.
+      const lookupName = outcome.data.genericName ?? outcome.data.productName;
+      const info = lookupName === undefined ? undefined : await lookupMedicineInfo(lookupName, tools);
+
+      const uses = info?.uses ?? outcome.data.usesAndBenefits;
+      const usesSource =
+        info?.uses !== undefined
+          ? info.usesSource
+          : outcome.data.usesAndBenefits !== undefined
+            ? ('model' as const)
+            : undefined;
 
       res.json({
-        medicine: outcome.data,
-        normalized,
+        medicine: {
+          ...outcome.data,
+          genericName: outcome.data.genericName ?? info?.genericName,
+          uses,
+          usesSource,
+          usesCaveat: uses === undefined ? undefined : USES_CAVEAT,
+          rxcui: info?.rxcui,
+          labelUrl: info?.labelUrl,
+        },
+        sources: info?.sources ?? [],
         interactionsChecked: false,
         interactionNotice: INTERACTION_NOTICE,
       });

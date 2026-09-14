@@ -77,18 +77,21 @@ export function createApp({ tools, config, firestoreEnabled }: AppDeps): Express
     });
   });
 
+  // One construction of the vision config, shared by every route that needs
+  // it — `undefined` when GEMINI_API_KEY is absent, which each route reports
+  // honestly rather than failing as if it were a bug.
+  const geminiConfig = config.gemini.enabled
+    ? {
+        apiKey: config.gemini.apiKey as string,
+        baseUrl: config.gemini.baseUrl,
+        visionModel: config.gemini.visionModel,
+      }
+    : undefined;
+
   app.use('/cases', createCaseRoutes(tools));
-  app.use(
-    '/medications',
-    createMedicationRoutes(
-      tools,
-      config.gemini.enabled
-        ? { apiKey: config.gemini.apiKey as string, baseUrl: config.gemini.baseUrl, visionModel: config.gemini.visionModel }
-        : undefined,
-    ),
-  );
+  app.use('/medications', createMedicationRoutes(tools, geminiConfig));
   app.use('/hospitals', createHospitalRoutes(tools));
-  app.use('/assistant', createAssistantRoutes(chatPort, tools.knowledge));
+  app.use('/assistant', createAssistantRoutes(chatPort, tools.knowledge, tools.medication, geminiConfig));
   app.use(errorHandler);
 
   return app;

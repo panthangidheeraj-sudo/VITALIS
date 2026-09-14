@@ -6,9 +6,10 @@
 
 const LOGO_SRC = '/assets/vitalis-logo.svg';
 
-export function Logo({ size = 32, rounded = true }: { readonly size?: number; readonly rounded?: boolean }) {
+export function Logo({ size = 32, rounded = true, id }: { readonly size?: number; readonly rounded?: boolean; readonly id?: string }) {
   return (
     <img
+      id={id}
       src={LOGO_SRC}
       alt="VITALIS"
       width={size}
@@ -18,10 +19,10 @@ export function Logo({ size = 32, rounded = true }: { readonly size?: number; re
   );
 }
 
-export function Wordmark({ size = 32, textSize = 17 }: { readonly size?: number; readonly textSize?: number }) {
+export function Wordmark({ size = 32, textSize = 17, logoId }: { readonly size?: number; readonly textSize?: number; readonly logoId?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: size * 0.28 }}>
-      <Logo size={size} />
+      <Logo size={size} id={logoId} />
       <span
         style={{
           fontFamily: 'var(--font-sans)',

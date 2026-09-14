@@ -22,6 +22,7 @@ export * from './types/notification.js';
 export * from './types/tool-call.js';
 export * from './types/handoff.js';
 export * from './types/case-state.js';
+export * from './types/injury.js';
 
 // --- Tool ports --------------------------------------------------------------
 export * from './tools/result.js';
@@ -29,6 +30,7 @@ export * from './tools/ports.js';
 
 // --- Policy ------------------------------------------------------------------
 export * from './policy/risk-policy.js';
+export * from './policy/injury-appearance.js';
 
 // --- Geo ---------------------------------------------------------------------
 export * from './geo/distance.js';

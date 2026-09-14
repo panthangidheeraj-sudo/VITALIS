@@ -27,6 +27,7 @@ import type { CommunicationRead } from './communication.js';
 import type { ConfidenceState } from './confidence.js';
 import type { EvidenceItem } from './evidence.js';
 import type { HospitalMatch, PreArrivalSummary } from './hospital.js';
+import type { InjuryTracking } from './injury.js';
 import type { NotificationRecord, RelayState } from './notification.js';
 import type { EmergencyCard, PatientDemographics, VitalReading } from './patient.js';
 import type { RiskAssessment } from './risk.js';
@@ -175,6 +176,13 @@ export interface CaseState {
 
   readonly notifications: readonly NotificationRecord[];
   readonly lastKnownLocation?: GeoFix;
+
+  /**
+   * Appearance tracking for injury photos (§5.7). Absent until a photo has
+   * been submitted. Deliberately NOT part of `risk` — see types/injury.ts for
+   * why the two must stay separate fields.
+   */
+  readonly injury?: InjuryTracking;
 
   readonly createdAt: IsoTimestamp;
   readonly updatedAt: IsoTimestamp;

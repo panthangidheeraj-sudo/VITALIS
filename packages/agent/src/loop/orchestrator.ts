@@ -28,6 +28,8 @@ import type {
   CommunicationRead,
   Contradiction,
   EvidenceItem,
+  InjuryObservation,
+  InjuryTracking,
   IsoTimestamp,
   NextAction,
   RiskAssessment,
@@ -45,8 +47,11 @@ import {
   asTurnId,
   allowedRoutingOutcomes,
   canFinalizeRouting,
+  compareObservations,
   isEscalation,
   MIN_EVIDENCE_TO_SCORE,
+  MIN_USABLE_IMAGE_QUALITY,
+  severityFromSigns,
   mustEscalateUnresolved,
   readyToScore,
   recommendOutcome,
@@ -85,7 +90,12 @@ async function observe(
   tools: AgentTools,
   turnId: TurnId,
   ctx: CallToolContext,
-): Promise<{ evidence: readonly EvidenceItem[]; added: readonly EvidenceItem[] }> {
+): Promise<{
+  evidence: readonly EvidenceItem[];
+  added: readonly EvidenceItem[];
+  /** Present only when this turn carried a usable injury photo. */
+  injury?: InjuryTracking;
+}> {
   const { ageYears, sex } = state.demographics;
   const isFirstTurn = state.turnCount === 0;
   const reportSource = input.fromCaregiver === true ? 'caregiver_report' : isFirstTurn ? 'initial_complaint' : 'question_answer';
@@ -143,11 +153,48 @@ async function observe(
     }
   }
 
+  let injury: InjuryTracking | undefined;
+
   if (input.kind === 'photo' && input.photoRef !== undefined) {
-    const photoResult = await callTool(ctx, 'groq.describe_injury_photo', `photoRef=${input.photoRef}`, () =>
+    // The tool-call record gets the photo's SIZE, not the photo — a base64
+    // data URL is megabytes long and the timeline is stored per turn.
+    const photoResult = await callTool(ctx, 'groq.describe_injury_photo', `photo(${input.photoRef.length} chars)`, () =>
       tools.reasoning.describeInjuryPhoto(input.photoRef!),
     );
-    if (photoResult.ok && photoResult.data.imageQuality >= 0.3) {
+
+    // Appearance tracking runs on EVERY photo result, including unusable
+    // ones: "the last photo was too dark to read" is information the patient
+    // needs, and silently dropping it would make the trend line lie by
+    // omission. Severity and trend both come from the deterministic policy in
+    // @triage/shared, never from the model.
+    if (photoResult.ok) {
+      const previousObservations = state.injury?.observations ?? [];
+      const previous = previousObservations[previousObservations.length - 1];
+      const severity = severityFromSigns(photoResult.data.visibleSigns, photoResult.data.imageQuality);
+      const { trend, detail } = compareObservations(previous, {
+        visibleSigns: photoResult.data.visibleSigns,
+        severity,
+      });
+      const observation: InjuryObservation = {
+        id: tools.ids.newId('inj'),
+        at: tools.clock.now(),
+        visibleSigns: photoResult.data.visibleSigns,
+        description: photoResult.data.description,
+        severity,
+        imageQuality: photoResult.data.imageQuality,
+        trend,
+        ...(detail !== undefined ? { trendDetail: detail } : {}),
+        imageReference: turnId,
+      };
+      injury = {
+        // Bounded to the schema's cap, oldest dropped first.
+        observations: [...previousObservations, observation].slice(-20),
+        currentSeverity: severity,
+        currentTrend: trend,
+      };
+    }
+
+    if (photoResult.ok && photoResult.data.imageQuality >= MIN_USABLE_IMAGE_QUALITY) {
       // Cap at two terms — each is its own tool call, and this is one photo
       // being turned into evidence, not an open-ended search spree.
       for (const term of photoResult.data.suggestedConceptTerms.slice(0, 2)) {
@@ -173,7 +220,7 @@ async function observe(
   }
 
   const { evidence, added } = applyEvidence(state.evidence, inputs, tools.clock.now(), tools.ids);
-  return { evidence, added };
+  return { evidence, added, ...(injury !== undefined ? { injury } : {}) };
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +259,7 @@ export async function orchestrateTurn(
       : 'ask_question';
 
   // --- OBSERVE ---------------------------------------------------------------
-  const { evidence, added } = await observe(state, input, tools, turnId, phaseCtx('observe'));
+  const { evidence, added, injury } = await observe(state, input, tools, turnId, phaseCtx('observe'));
 
   if (input.kind === 'vital') {
     // Vitals are recorded on the case directly; this build does not attempt
@@ -541,6 +588,9 @@ export async function orchestrateTurn(
     communication,
     lastTurnId: turnId,
     turnCount: state.turnCount + 1,
+    // Only replaced when this turn actually produced an observation; a text
+    // turn must never blank out the photo history.
+    ...(injury !== undefined ? { injury } : {}),
     ...(routing !== undefined ? { routing } : {}),
     escalation,
     degradation: {

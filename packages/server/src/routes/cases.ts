@@ -56,7 +56,13 @@ const createCaseSchema = z.object({
 const turnSchema = z.object({
   kind: z.enum(['text', 'voice_transcript', 'photo', 'quick_select', 'vital', 'system_tick']),
   text: z.string().max(2048).optional(),
-  photoRef: z.string().max(512).optional(),
+  /**
+   * A `data:image/...;base64,...` URL, which is how every client actually
+   * sends a photo — the old 512-character cap silently rejected every real
+   * image with a 400, so the photo path was wired and dead. Bounded by
+   * `express.json`'s own 10mb body limit in app.ts.
+   */
+  photoRef: z.string().max(8_000_000).optional(),
   quickSelectTags: z.array(z.string().max(64)).max(11).optional(),
   fromCaregiver: z.boolean().optional(),
 });
@@ -143,6 +149,9 @@ function summarize(state: CaseState) {
     routing: state.routing,
     dispatch: state.dispatch,
     escalation: state.escalation,
+    // Appearance tracking for submitted injury photos. Sent alongside — never
+    // merged into — `riskTier`, which remains the deterministic scorer's.
+    injury: state.injury,
   };
 }
 

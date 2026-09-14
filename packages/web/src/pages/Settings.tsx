@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { getPermission, isEnabled, notificationsSupported, requestPermission, setEnabled } from '../data/notifications';
+import { useLanguage, type LanguageCode } from '../data/languageStore';
+import { useTranslation } from '../data/translations';
 
 /**
  * Every row here either genuinely works or is explicitly marked as not
@@ -17,6 +19,8 @@ export function Settings() {
   const [notifPermission, setNotifPermission] = useState(getPermission());
   const [notifEnabled, setNotifEnabled] = useState(isEnabled());
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const { language, setLanguage } = useLanguage();
+  const { t } = useTranslation();
 
   useEffect(() => {
     let cancelled = false;
@@ -58,18 +62,52 @@ export function Settings() {
       'vitalis.profile.v1',
       'vitalis.chatSessions.v1',
       'vitalis.chatActiveSession.v1',
+      'vitalis.language.v1',
     ]) {
       localStorage.removeItem(key);
     }
     window.location.reload();
   };
 
+  const languages: { code: LanguageCode; label: string }[] = [
+    { code: 'en', label: 'English' },
+    { code: 'hi', label: 'हिंदी (Hindi)' },
+    { code: 'te', label: 'తెలుగు (Telugu)' },
+  ];
+
   return (
     <div className="page fade-up">
-      <h1 className="h1">Settings</h1>
+      <h1 className="h1">{t('settings.title')}</h1>
 
-      <Row to="/profile" title="Profile" sub="Name, age, sex, blood group, allergies" />
+      <Row to="/profile" title={t('settings.profile')} sub="Name, age, sex, blood group, allergies" />
       <Row to="/settings/version" title="Version history" sub="What's changed" />
+
+      <div className="glass card">
+        <div className="label">{t('settings.language')}</div>
+        <p className="small" style={{ marginTop: 6, marginBottom: 12 }}>
+          Changes the interface language globally across VITALIS.
+        </p>
+        <div className="row" style={{ gap: 8 }}>
+          {languages.map((l) => (
+            <button
+              key={l.code}
+              type="button"
+              onClick={() => setLanguage(l.code)}
+              className="btn"
+              style={{
+                flex: 1,
+                padding: '10px 8px',
+                fontSize: 13,
+                background: language === l.code ? 'var(--primary)' : 'rgba(255,255,255,0.6)',
+                color: language === l.code ? '#fff' : 'var(--ink)',
+                border: '1px solid var(--hairline)',
+              }}
+            >
+              {l.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="glass card">
         <div className="label">Backend connection</div>
@@ -81,7 +119,7 @@ export function Settings() {
       <div className="glass card">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
-            <div className="label">Medication notifications</div>
+            <div className="label">{t('settings.notifications')}</div>
             <p className="small" style={{ marginTop: 6, maxWidth: 220 }}>
               {notificationsSupported()
                 ? 'Only fires while VITALIS is open in this browser tab — there is no push/closed-tab delivery.'
@@ -102,7 +140,7 @@ export function Settings() {
       </div>
 
       <div className="glass card">
-        <div className="label">Motion</div>
+        <div className="label">{t('settings.motion')}</div>
         <p className="small" style={{ marginTop: 6 }}>
           Reduced motion is {reducedMotion ? 'ON' : 'OFF'} — set in your OS/browser, not in VITALIS. Animations already follow it everywhere in this app.
         </p>
@@ -110,7 +148,7 @@ export function Settings() {
 
       <div className="glass card">
         <div className="label" style={{ color: 'var(--danger-deep)' }}>
-          Local data
+          {t('settings.localData')}
         </div>
         <p className="small" style={{ marginTop: 6, marginBottom: 10 }}>
           Vitals, medications and your profile live only in this browser. Clearing them cannot be undone.

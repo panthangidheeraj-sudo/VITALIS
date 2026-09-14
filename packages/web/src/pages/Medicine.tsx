@@ -1,7 +1,8 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api, ApiError, type MedicineIdentification } from '../api/client';
+import { api, ApiError, type MedicineIdentification, type MedicineInfoSource } from '../api/client';
 import { CameraIcon } from '../components/icons';
+import { MedicineCard } from '../components/MedicineCard';
 
 /**
  * Camera -> medicine identification (Home's "Medicine scanner" tile).
@@ -18,6 +19,7 @@ export function Medicine() {
   const [photo, setPhoto] = useState<string | undefined>(undefined);
   const [status, setStatus] = useState<'idle' | 'reading' | 'done' | 'error' | 'unavailable'>('idle');
   const [result, setResult] = useState<MedicineIdentification | undefined>(undefined);
+  const [sources, setSources] = useState<readonly MedicineInfoSource[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | undefined>(undefined);
 
   const onFile = (file: File | undefined) => {
@@ -34,6 +36,7 @@ export function Medicine() {
         .identifyMedicine(dataUrl)
         .then((res) => {
           setResult(res.medicine);
+          setSources(res.sources ?? []);
           setStatus('done');
         })
         .catch((err: unknown) => {
@@ -133,7 +136,9 @@ export function Medicine() {
         </div>
       ) : null}
 
-      {status === 'done' && result !== undefined ? <ResultCard result={result} /> : null}
+      {/* Same card the Assistant renders, so the two paths can never show a
+          medicine differently or disagree about where its uses came from. */}
+      {status === 'done' && result !== undefined ? <MedicineCard medicine={result} sources={sources} /> : null}
 
       {photo !== undefined ? (
         <button className="btn btn-secondary" onClick={reset}>
@@ -145,59 +150,6 @@ export function Medicine() {
         Not a substitute for reading the physical label. Always verify expiry and dosage yourself before taking any
         medicine.
       </p>
-    </div>
-  );
-}
-
-function ResultCard({ result }: { readonly result: MedicineIdentification }) {
-  const lowConfidence = result.confidence < 0.5;
-  return (
-    <div className="glass card">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <div className="label">Reading</div>
-        <span
-          className="pill"
-          style={{
-            fontSize: 10,
-            padding: '3px 9px',
-            background: lowConfidence ? 'rgba(245,166,35,0.15)' : 'rgba(34,197,94,0.15)',
-            color: lowConfidence ? 'var(--warn)' : 'var(--ok)',
-            border: 'none',
-          }}
-        >
-          {lowConfidence ? 'Low confidence' : `${Math.round(result.confidence * 100)}% confident`}
-        </span>
-      </div>
-
-      <Field label="Product name" value={result.productName} />
-      <Field label="Strength / dosage" value={result.strength} />
-      <Field label="Expiry date" value={result.expiryDateText} />
-      <Field label="Manufacturer" value={result.manufacturer} />
-
-      <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--divider)' }}>
-        <div className="label">Notes</div>
-        <p className="small" style={{ marginTop: 6 }}>{result.notes}</p>
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, value }: { readonly label: string; readonly value: string | undefined }) {
-  return (
-    <div className="row" style={{ justifyContent: 'space-between', padding: '9px 0', borderTop: '1px solid var(--divider)' }}>
-      <span className="small">{label}</span>
-      <span
-        style={{
-          fontFamily: 'var(--font-sans)',
-          fontWeight: 700,
-          fontSize: 13,
-          color: value === undefined ? 'var(--danger-deep)' : 'var(--ink)',
-          textAlign: 'right',
-          maxWidth: '60%',
-        }}
-      >
-        {value ?? 'Not clearly visible — please verify from the package'}
-      </span>
     </div>
   );
 }

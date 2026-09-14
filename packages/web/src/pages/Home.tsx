@@ -5,6 +5,7 @@ import { VitalsPanel } from '../components/VitalsPanel';
 import { MedicationsPanel } from '../components/MedicationsPanel';
 import { Wordmark } from '../components/Logo';
 import { PhoneIcon, GearIcon, BandageIcon, BloodDropIcon, CapsuleIcon, ChevronRightSmall } from '../components/icons';
+import { useTranslation } from '../data/translations';
 
 /**
  * Ported from packages/mobile/src/screens/HomeScreen.tsx's uncommitted
@@ -18,6 +19,7 @@ import { PhoneIcon, GearIcon, BandageIcon, BloodDropIcon, CapsuleIcon, ChevronRi
  */
 export function Home() {
   const [reachable, setReachable] = useState<boolean | undefined>(undefined);
+  const { t } = useTranslation();
 
   useEffect(() => {
     let cancelled = false;
@@ -37,7 +39,10 @@ export function Home() {
   return (
     <div className="page">
       <div className="row fade-up" style={{ padding: '4px 2px 0' }}>
-        <Wordmark size={32} textSize={17} />
+        {/* `logoId` is the intro splash's shrink-to-position target (item
+            17, stage 6) — the ONLY reason this id exists on this specific
+            instance and not every Wordmark in the app. */}
+        <Wordmark size={32} textSize={17} logoId="vitalis-header-logo" />
       </div>
 
       {reachable === false ? (
@@ -53,7 +58,7 @@ export function Home() {
           inside the "Start emergency" link, so tapping it silently opened
           Emergency instead of Settings. Two separate links sharing one
           visual banner instead. */}
-      <div className="fade-up" style={{ ...emergencyOuterStyle, animationDelay: '40ms' }}>
+      <div className="glass-emerge" style={{ ...emergencyOuterStyle, animationDelay: '40ms' }}>
         <div style={emergencyGradientStyle} />
         <div style={emergencyContentStyle}>
           <Link to="/emergency" style={{ display: 'flex', alignItems: 'center', gap: 14, flex: 1, textDecoration: 'none', height: '100%' }}>
@@ -61,7 +66,7 @@ export function Home() {
               <PhoneIcon size={26} />
             </div>
             <span style={{ flex: 1, fontFamily: 'var(--font-sans)', fontWeight: 700, fontSize: 17, color: 'var(--ink)', textAlign: 'center', letterSpacing: -0.3 }}>
-              Start emergency
+              {t('home.startEmergency') || 'Start emergency'}
             </span>
           </Link>
           <Link to="/settings" aria-label="Settings" style={settingsWrapStyle}>
@@ -70,18 +75,18 @@ export function Home() {
         </div>
       </div>
 
-      <div className="fade-up" style={{ animationDelay: '100ms' }}>
+      <div className="glass-emerge" style={{ animationDelay: '100ms' }}>
         <VitalsPanel />
       </div>
 
-      <div className="fade-up" style={{ animationDelay: '160ms' }}>
+      <div className="glass-emerge" style={{ animationDelay: '160ms' }}>
         <MedicationsPanel />
       </div>
 
-      <div className="grid-2 fade-up" style={{ animationDelay: '220ms' }}>
-        <FeatureTile icon={<BloodDropIcon />} iconBg="rgba(255,100,100,0.12)" title="Emergency" sub="Start the triage interview" to="/emergency" />
-        <FeatureTile icon={<BandageIcon />} iconBg="rgba(200,175,130,0.18)" title="First aid" sub="Works with no signal" to="/first-aid" />
-        <FeatureTile icon={<CapsuleIcon />} iconBg="rgba(255,180,50,0.14)" title="Medicine scanner" sub="Photograph a pack for its name & expiry" to="/medicine" />
+      <div className="grid-2 glass-emerge" style={{ animationDelay: '220ms' }}>
+        <FeatureTile icon={<BloodDropIcon />} iconBg="rgba(255,100,100,0.12)" title={t('home.emergency')} sub={t('home.emergencySub')} to="/emergency" />
+        <FeatureTile icon={<BandageIcon />} iconBg="rgba(200,175,130,0.18)" title={t('home.firstAid')} sub={t('home.firstAidSub')} to="/first-aid" />
+        <FeatureTile icon={<CapsuleIcon />} iconBg="rgba(255,180,50,0.14)" title={t('home.medicineScanner')} sub={t('home.medicineScannerSub')} to="/medicine" />
       </div>
 
       <p className="foot" style={{ textAlign: 'center', marginTop: 4 }}>

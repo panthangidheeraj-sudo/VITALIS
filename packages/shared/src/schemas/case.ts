@@ -11,6 +11,7 @@
 
 import { z } from 'zod';
 import { CASE_MODES } from '../types/case-state.js';
+import { INJURY_SEVERITIES, INJURY_TRENDS } from '../types/injury.js';
 import { COMMUNICATION_STATES } from '../types/communication.js';
 import { CONFIDENCE_LEVELS } from '../types/confidence.js';
 import { RISK_TIERS, TRIAGE_LEVELS } from '../types/risk.js';
@@ -366,6 +367,36 @@ export const degradationStateSchema = z.object({
   affectedTools: z.array(z.string()),
 });
 
+// --- Injury appearance tracking ---------------------------------------------
+
+/**
+ * Note what is NOT in this schema: a risk tier. Severity here describes how
+ * the injury LOOKS across successive photos and is computed by
+ * `policy/injury-appearance.ts` from the closed VISIBLE_SIGNS vocabulary —
+ * `risk.tier` stays the deterministic scorer's sole output. The two are kept
+ * in separate fields precisely so no UI or later edit can quietly conflate
+ * "the photo looks bad" with "the engine classified this as red".
+ */
+export const injuryObservationSchema = z.object({
+  id: z.string().min(1),
+  at: isoTimestampSchema,
+  visibleSigns: z.array(z.string()).max(8),
+  description: z.string().max(600),
+  severity: z.enum(INJURY_SEVERITIES),
+  imageQuality: unitIntervalSchema,
+  trend: z.enum(INJURY_TRENDS),
+  trendDetail: z.string().max(300).optional(),
+  /** An opaque id, never the image bytes — case documents are capped at 1 MiB. */
+  imageReference: z.string().max(200).optional(),
+});
+
+export const injuryTrackingSchema = z.object({
+  /** Capped: a case document has a hard size limit and this is a rolling log. */
+  observations: z.array(injuryObservationSchema).max(20),
+  currentSeverity: z.enum(INJURY_SEVERITIES),
+  currentTrend: z.enum(INJURY_TRENDS),
+});
+
 // --- The case document -------------------------------------------------------
 
 export const caseStateSchema = z
@@ -417,6 +448,8 @@ export const caseStateSchema = z
 
     notifications: z.array(notificationRecordSchema),
     lastKnownLocation: geoFixSchema.optional(),
+    /** Optional: only present once a photo of an injury has been submitted. */
+    injury: injuryTrackingSchema.optional(),
 
     createdAt: isoTimestampSchema,
     updatedAt: isoTimestampSchema,

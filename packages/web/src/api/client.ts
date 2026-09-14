@@ -12,7 +12,7 @@
  * anywhere in packages/web — those stay server-side, same as the mobile app.
  */
 
-import type { BiologicalSex, CaseId, Hospital, RiskTier, RoutingDecision } from '@triage/shared';
+import type { BiologicalSex, CaseId, Hospital, InjuryTracking, RiskTier, RoutingDecision } from '@triage/shared';
 
 const RAW_ENV_URL = import.meta.env.VITE_API_URL as string | undefined;
 const BASE_URL = RAW_ENV_URL ?? 'http://localhost:8787';
@@ -48,6 +48,12 @@ export interface CaseSummary {
   readonly routing?: RoutingDecision;
   readonly dispatch: { readonly status: string; readonly etaMinutes?: number; readonly contactNumber?: string };
   readonly escalation: { readonly escalated: boolean; readonly detail?: string };
+  /**
+   * Appearance tracking from submitted injury photos. Sent ALONGSIDE
+   * `riskTier`, never instead of it — the tier is the deterministic scorer's
+   * output; this only describes what successive photos looked like.
+   */
+  readonly injury?: InjuryTracking;
 }
 
 export interface TurnResponse extends CaseSummary {
@@ -74,21 +80,59 @@ export interface MedicationLookup {
   readonly interactionNotice: string;
 }
 
+export interface MedicineInfoSource {
+  readonly provider: 'rxnorm' | 'medlineplus' | 'dailymed' | 'model';
+  readonly title: string;
+  readonly url?: string;
+}
+
 export interface MedicineIdentification {
   readonly productName?: string;
+  readonly genericName?: string;
   readonly strength?: string;
+  readonly dosageForm?: string;
   readonly expiryDateText?: string;
+  /** Several dates printed and none identifiable as the expiry — ask the user. */
+  readonly expiryAmbiguous?: boolean;
   readonly manufacturer?: string;
+  /** What it is COMMONLY USED FOR. Prefer this over `usesAndBenefits`. */
+  readonly uses?: string;
+  /** `'medlineplus'` = trusted source; `'model'` = the vision model's own text. */
+  readonly usesSource?: 'medlineplus' | 'model';
+  readonly usesCaveat?: string;
+  readonly rxcui?: string;
+  readonly labelUrl?: string;
+  /** Legacy field from the vision model; superseded by `uses`. */
+  readonly usesAndBenefits?: string;
+  readonly cautions?: string;
   readonly confidence: number;
   readonly notes: string;
 }
 
 export interface MedicineIdentifyResult {
   readonly medicine: MedicineIdentification;
+  readonly sources?: readonly MedicineInfoSource[];
   readonly normalized?: MedicationLookup['medications'];
   readonly interactionsChecked: false;
   readonly interactionNotice: string;
 }
+
+export interface ImageClassification {
+  readonly kind: 'medicine' | 'injury' | 'other';
+  readonly confidence: number;
+  readonly reason: string;
+}
+
+/**
+ * What `POST /assistant/image` answers. Medicine is resolved in full server
+ * side; an injury only gets CLASSIFIED here — the client then submits it as a
+ * real `photo` turn on a case so the deterministic triage loop, not this
+ * endpoint, produces anything risk-bearing.
+ */
+export type AnalyzeImageResult =
+  | ({ readonly kind: 'medicine'; readonly classification: ImageClassification; readonly narrative?: string } & MedicineIdentifyResult)
+  | { readonly kind: 'injury'; readonly classification: ImageClassification }
+  | { readonly kind: 'other'; readonly classification: ImageClassification };
 
 export class ApiError extends Error {
   constructor(
@@ -189,6 +233,15 @@ export const api = {
    * the only place GEMINI_API_KEY is used (see gemini-medicine-vision.ts). */
   identifyMedicine: (photoRef: string) =>
     request<MedicineIdentifyResult>('/medications/identify', { photoRef }),
+
+  /** The Assistant camera's single entry point — classifies, then resolves a
+   * medicine fully or hands an injury back for the case path to handle. */
+  analyzeImage: (photoRef: string) => request<AnalyzeImageResult>('/assistant/image', { photoRef }),
+
+  /** An injury photo as a real triage turn: vision → evidence → deterministic
+   * scorer → next adaptive question, exactly like a text answer. */
+  submitPhoto: (caseId: CaseId, photoRef: string) =>
+    request<TurnResponse>(`/cases/${caseId}/turns`, { kind: 'photo', photoRef }),
 
   assistantChat: (message: string, history: readonly { readonly role: 'user' | 'assistant'; readonly content: string }[]) =>
     request<{

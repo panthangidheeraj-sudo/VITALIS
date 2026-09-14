@@ -182,7 +182,11 @@ export function Emergency() {
     <div className="page">
       <h1 className="h1 fade-up">Emergency triage</h1>
 
-      <div className="glass glass-lift fade-up" style={{ borderRadius: 20, overflow: 'hidden', animationDelay: '50ms' }}>
+      {/* Emergency is "more serious than the other screens" — fast, restrained
+          entrance (glass-emerge-fast: 220ms, not the app's usual 380ms), no
+          stagger beyond this one card, and no decorative motion competing
+          with the instructions that follow. */}
+      <div className="glass glass-lift glass-emerge-fast" style={{ borderRadius: 20, overflow: 'hidden' }}>
         <div style={{ background: TIER_COLOR[tier], padding: 18, color: '#fff' }}>
           <div className="label" style={{ color: 'rgba(255,255,255,0.82)' }}>
             Risk · clinical engine
