@@ -40,20 +40,68 @@ export interface ChatSession {
   readonly summary?: unknown;
 }
 
+/**
+ * Stored sessions are VALIDATED, not cast.
+ *
+ * `loadAll` used to return `parsed as ChatSession[]` after checking only that
+ * the top level was an array, which is a promise the data cannot keep: the
+ * contents come from a previous build of this app, another tab, or a partial
+ * write. One entry whose `messages` is missing is enough to throw inside
+ * `deriveTitle`, and — because Assistant reads `session.messages.length` in a
+ * `useState` initializer — to throw DURING RENDER, which unmounts the app.
+ * A malformed entry is dropped instead; a corrupt history should cost the
+ * user their transcript, never the screen.
+ */
+function isStoredMessage(value: unknown): value is StoredMessage {
+  if (typeof value !== 'object' || value === null) return false;
+  const m = value as Record<string, unknown>;
+  return typeof m['id'] === 'string' && (m['who'] === 'agent' || m['who'] === 'user') && typeof m['text'] === 'string';
+}
+
+function isChatSession(value: unknown): value is ChatSession {
+  if (typeof value !== 'object' || value === null) return false;
+  const s = value as Record<string, unknown>;
+  return (
+    typeof s['id'] === 'string' &&
+    typeof s['createdAt'] === 'number' &&
+    typeof s['updatedAt'] === 'number' &&
+    typeof s['title'] === 'string' &&
+    Array.isArray(s['messages']) &&
+    s['messages'].every(isStoredMessage)
+  );
+}
+
 function loadAll(): ChatSession[] {
   try {
     const raw = localStorage.getItem(SESSIONS_KEY);
     if (raw === null) return [];
     const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as ChatSession[]) : [];
+    return Array.isArray(parsed) ? parsed.filter(isChatSession) : [];
   } catch {
     return [];
   }
 }
 
+/**
+ * Writes are guarded for the same reason. `setItem` throws when the origin's
+ * quota is full or site data is blocked (a private window, a locked-down
+ * browser), and this runs on EVERY message — so an unguarded throw here does
+ * not lose a save, it breaks sending. The conversation stays correct in memory
+ * either way; only its persistence is lost, which is the right thing to lose.
+ */
 function saveAll(sessions: readonly ChatSession[]): void {
   const trimmed = [...sessions].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, MAX_SESSIONS);
-  localStorage.setItem(SESSIONS_KEY, JSON.stringify(trimmed));
+  try {
+    localStorage.setItem(SESSIONS_KEY, JSON.stringify(trimmed));
+  } catch {
+    // Retry once with a much shorter history: the common cause is quota, and
+    // the oldest conversations are the cheapest thing to give up.
+    try {
+      localStorage.setItem(SESSIONS_KEY, JSON.stringify(trimmed.slice(0, 3)));
+    } catch {
+      // Storage is genuinely unavailable. Nothing more to do here.
+    }
+  }
 }
 
 export function listSessions(): ChatSession[] {
@@ -65,11 +113,20 @@ export function getSession(id: string): ChatSession | undefined {
 }
 
 export function getActiveSessionId(): string | undefined {
-  return localStorage.getItem(ACTIVE_KEY) ?? undefined;
+  try {
+    return localStorage.getItem(ACTIVE_KEY) ?? undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function setActiveSessionId(id: string): void {
-  localStorage.setItem(ACTIVE_KEY, id);
+  try {
+    localStorage.setItem(ACTIVE_KEY, id);
+  } catch {
+    // Same trade as saveAll: the session is still active in memory, it just
+    // will not be the one restored after a reload.
+  }
 }
 
 function deriveTitle(messages: readonly StoredMessage[]): string {

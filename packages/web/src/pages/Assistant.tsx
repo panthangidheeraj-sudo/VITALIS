@@ -24,6 +24,7 @@ import {
   setActiveSessionId,
   type ChatSession,
 } from '../data/chatHistoryStore';
+import { readImageFile } from '../data/imageInput';
 
 /**
  * Ported from packages/mobile/src/screens/AssistantScreen.tsx — same rule:
@@ -45,13 +46,6 @@ function needsTriage(text: string): boolean {
   return ESCALATE_TERMS.some((term) => lower.includes(term));
 }
 
-/**
- * Phone cameras routinely produce 4–8 MB JPEGs, and base64 adds ~33% on top.
- * The server's body limit is 10 MB, so anything above this would be rejected
- * by Express with an opaque error the user could not act on — caught here,
- * where the message can actually say what to do about it.
- */
-const MAX_IMAGE_BYTES = 6_000_000;
 
 /**
  * Every documented failure mode gets its own sentence. The one thing this must
@@ -241,28 +235,10 @@ export function Assistant() {
     if (!file) return;
 
     setImageError(undefined);
-    if (!file.type.startsWith('image/')) {
-      setImageError('That file is not an image. Choose a JPG or PNG photo.');
-      return;
-    }
-    if (file.size > MAX_IMAGE_BYTES) {
-      setImageError(
-        `That photo is ${(file.size / 1_000_000).toFixed(1)} MB, which is too large to send. Try a smaller photo, or your camera's lower-resolution setting.`,
-      );
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const dataUrl = typeof event.target?.result === 'string' ? event.target.result : undefined;
-      if (dataUrl === undefined) {
-        setImageError('That photo could not be read from your device. Try another one.');
-        return;
-      }
-      setDraftImage(dataUrl);
-    };
-    reader.onerror = () => setImageError('That photo could not be read from your device. Try another one.');
-    reader.readAsDataURL(file);
+    void readImageFile(file).then((result) => {
+      if (result.ok) setDraftImage(result.dataUrl);
+      else setImageError(result.message);
+    });
   };
 
   const send = useCallback(async () => {

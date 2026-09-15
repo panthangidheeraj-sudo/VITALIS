@@ -4,6 +4,7 @@ import { api } from '../api/client';
 import { getPermission, isEnabled, notificationsSupported, requestPermission, setEnabled } from '../data/notifications';
 import { useLanguage, type LanguageCode } from '../data/languageStore';
 import { useTranslation } from '../data/translations';
+import { VITALIS_STORAGE_KEYS } from '../data/storageKeys';
 
 /**
  * Every row here either genuinely works or is explicitly marked as not
@@ -56,15 +57,16 @@ export function Settings() {
 
   const clearLocalData = () => {
     if (!window.confirm('Remove all vitals, medications and profile data stored on this device? This cannot be undone.')) return;
-    for (const key of [
-      'vitalis.vitals.v1',
-      'vitalis.medications.v1',
-      'vitalis.profile.v1',
-      'vitalis.chatSessions.v1',
-      'vitalis.chatActiveSession.v1',
-      'vitalis.language.v1',
-    ]) {
-      localStorage.removeItem(key);
+    // Sourced from data/storageKeys.ts, not repeated here — see the note
+    // there about the identifier this list previously left behind.
+    for (const key of VITALIS_STORAGE_KEYS) {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // A blocked/full store must not abort the loop partway: the
+        // remaining keys still need removing, and the reload below still
+        // needs to happen.
+      }
     }
     window.location.reload();
   };

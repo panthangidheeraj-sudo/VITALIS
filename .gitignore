@@ -25,6 +25,9 @@ ui-debug.log
 npm-debug.log*
 
 # Editor / OS
+*.bak
+*.orig
+*.rej
 .vscode/
 .idea/
 .DS_Store

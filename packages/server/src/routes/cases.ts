@@ -408,7 +408,22 @@ export function errorHandler(
     res.status(400).json({ error: 'gate_not_satisfied', message: err.message });
     return;
   }
-  const message = err instanceof Error ? err.message : 'Unknown error';
+  // The three branches above return messages this codebase WROTE, so they are
+  // safe to show. Anything reaching here did not come from us: it is whatever
+  // firebase-admin, the Node runtime or a third-party client happened to throw,
+  // and those messages routinely carry connection strings, request URLs with
+  // credentials in the query, file paths and internal identifiers.
+  //
+  // Forwarding it verbatim is exactly the leak that made `safeUrl()` necessary
+  // in adapters/http.ts, and this handler is the other end of the same hole:
+  // an error that never passes through an adapter still lands here. So the
+  // detail is LOGGED (server-side, where it is needed to debug) and the client
+  // gets a fixed sentence it can act on. Losing per-error detail in the
+  // response is the intended trade — a caller cannot do anything useful with
+  // "ECONNREFUSED 10.0.0.4:5432" that it cannot do with this.
   console.error('[server] unhandled error:', err);
-  res.status(500).json({ error: 'internal_error', message });
+  res.status(500).json({
+    error: 'internal_error',
+    message: 'Something went wrong on the server. Please try again.',
+  });
 }

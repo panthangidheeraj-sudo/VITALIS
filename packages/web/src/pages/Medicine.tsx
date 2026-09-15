@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api, ApiError, type MedicineIdentification, type MedicineInfoSource } from '../api/client';
 import { CameraIcon } from '../components/icons';
 import { MedicineCard } from '../components/MedicineCard';
+import { readImageFile } from '../data/imageInput';
 
 /**
  * Camera -> medicine identification (Home's "Medicine scanner" tile).
@@ -24,16 +25,23 @@ export function Medicine() {
 
   const onFile = (file: File | undefined) => {
     if (file === undefined) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = typeof reader.result === 'string' ? reader.result : undefined;
-      if (dataUrl === undefined) return;
-      setPhoto(dataUrl);
+    // Type/size/read validation lives in data/imageInput.ts, shared with the
+    // Assistant's camera button, so an oversized photo is refused here with
+    // an actionable message instead of becoming an opaque 413 at the server.
+    void readImageFile(file).then((read) => {
+      if (!read.ok) {
+        setPhoto(undefined);
+        setResult(undefined);
+        setErrorMessage(read.message);
+        setStatus('error');
+        return;
+      }
+      setPhoto(read.dataUrl);
       setResult(undefined);
       setErrorMessage(undefined);
       setStatus('reading');
       api
-        .identifyMedicine(dataUrl)
+        .identifyMedicine(read.dataUrl)
         .then((res) => {
           setResult(res.medicine);
           setSources(res.sources ?? []);
@@ -47,8 +55,7 @@ export function Medicine() {
           setErrorMessage(err instanceof ApiError ? err.message : 'Could not read that photo. Try again.');
           setStatus('error');
         });
-    };
-    reader.readAsDataURL(file);
+    });
   };
 
   const reset = () => {
@@ -78,7 +85,13 @@ export function Medicine() {
         accept="image/*"
         capture="environment"
         style={{ display: 'none' }}
-        onChange={(e) => onFile(e.target.files?.[0])}
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          // Cleared immediately so re-picking the SAME file still fires a
+          // change event — otherwise retrying after an error does nothing.
+          e.target.value = '';
+          onFile(file);
+        }}
       />
 
       {photo === undefined ? (
