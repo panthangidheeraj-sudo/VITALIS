@@ -178,7 +178,7 @@ export function FloatingLines({
   bendStrength = -0.5,
   interactive = true,
   parallax = true,
-  animationSpeed = 0.6,
+  animationSpeed = 0.9,
   linesGradient = ['#1D4ED8', '#60A5FA', '#FFFFFF'],
 }: FloatingLinesProps) {
   const containerRef = useRef<HTMLDivElement>(null);
