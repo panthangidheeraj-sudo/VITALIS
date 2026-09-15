@@ -46,7 +46,7 @@ export function Nav() {
           >
             {({ isActive }) => (
               <>
-                <NavGlyph id={item.id} tint={isActive ? '#1769E8' : '#93A9CE'} />
+                <NavGlyph id={item.id} tint={isActive ? '#1769E8' : '#93A9CE'} active={isActive} />
                 <span>{t(item.tKey)}</span>
               </>
             )}

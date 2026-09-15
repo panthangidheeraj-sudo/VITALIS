@@ -794,10 +794,6 @@ textarea:focus-visible {
   .spinner,
   .card-pop,
   .orb-glow,
-  .orb-ring,
-  .orb-core,
-  .orb-dot,
-  .orb-status,
   .count-up,
   .glass-loading .dot-beat,
   .attn-pulse,
@@ -881,60 +877,35 @@ textarea:focus-visible {
   position: relative;
   width: 118px;
   height: 118px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 50% 50%, rgba(255, 255, 255, 0.95) 0 26%, rgba(23, 105, 232, 0.09) 42%, rgba(255, 255, 255, 0.6) 58%, rgba(23, 105, 232, 0.07) 74%, transparent 86%);
   display: flex;
   align-items: center;
   justify-content: center;
   animation: orb-emerge 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.orb-ring {
+/* Soft blue light BEHIND the mark, not a shape around it: the logo is the
+   identity on this screen, so nothing is drawn over or outside its edges —
+   no ring, no core, no second circle. Larger than the logo and fully
+   transparent at the rim so it reads as glow rather than as a disc. */
+.orb-glow::before {
+  content: '';
   position: absolute;
-  width: 94px;
-  height: 94px;
+  inset: -14px;
   border-radius: 50%;
-  border: 1px solid rgba(23, 105, 232, 0.16);
-  animation: orb-ring-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) 150ms both;
+  background: radial-gradient(
+    circle at 50% 50%,
+    rgba(23, 105, 232, 0.16) 0%,
+    rgba(23, 105, 232, 0.09) 46%,
+    rgba(23, 105, 232, 0) 72%
+  );
 }
 
-.orb-core {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 34% 28%, #ffffff, rgba(23, 105, 232, 0.18) 62%, rgba(23, 105, 232, 0.45));
-  border: 1px solid rgba(255, 255, 255, 0.95);
-  box-shadow: 0 12px 26px -10px rgba(23, 105, 232, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  animation: orb-core-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) 300ms both;
-}
-
-.orb-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--primary);
-  /* Pops in, THEN (once settled) loops a slow idle pulse — two animations,
-     the second timed to start exactly as the first ends (450ms delay +
-     400ms duration = 850ms). Nothing pulses until the orb has finished
-     assembling. */
-  animation:
-    orb-dot-in 0.4s cubic-bezier(0.22, 1, 0.36, 1) 450ms both,
-    orb-pulse 2.6s ease-in-out 850ms infinite;
-}
-
-.orb-status {
-  position: absolute;
-  right: 16px;
-  bottom: 20px;
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  background: var(--ok);
-  border: 2px solid #fff;
-  animation: orb-status-in 0.35s ease 600ms both;
+.orb-logo {
+  position: relative;
+  /* A low, wide drop shadow tinted with the brand blue — the "premium glass"
+     lift, applied to the mark's own silhouette rather than to a box behind
+     it, so the logo's rounded-square corners stay clean. */
+  filter: drop-shadow(0 14px 26px rgba(23, 105, 232, 0.28));
 }
 
 @keyframes orb-emerge {
@@ -945,62 +916,6 @@ textarea:focus-visible {
   to {
     opacity: 1;
     transform: scale(1);
-  }
-}
-
-@keyframes orb-ring-in {
-  from {
-    opacity: 0;
-    transform: scale(0.82) rotate(-10deg);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) rotate(0deg);
-  }
-}
-
-@keyframes orb-core-in {
-  from {
-    opacity: 0;
-    transform: scale(0.6);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes orb-dot-in {
-  from {
-    opacity: 0;
-    transform: scale(0);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes orb-status-in {
-  from {
-    opacity: 0;
-    transform: scale(0.5);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-@keyframes orb-pulse {
-  0%,
-  100% {
-    opacity: 0.55;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.12);
   }
 }
 

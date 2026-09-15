@@ -6,6 +6,8 @@
  * direct port, not a redraw.
  */
 
+import { Logo } from './Logo';
+
 export function PhoneIcon({ size = 26 }: { readonly size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
@@ -114,7 +116,14 @@ export function HeartIcon({ size = 20 }: { readonly size?: number }) {
 }
 
 /** The four bottom-nav glyphs, ported from ui/Chrome.tsx's `NavIcon`. */
-export function NavGlyph({ id, tint }: { readonly id: string; readonly tint: string }) {
+/**
+ * `active` exists only for the Assistant tab. Every other glyph is a stroked
+ * path that takes the selected colour through `tint`; the VITALIS logo is a
+ * full-colour mark and recolouring it would be modifying the logo, so it
+ * carries its selected state as opacity instead — full when selected,
+ * dimmed when not, matching how the other glyphs read at #93A9CE.
+ */
+export function NavGlyph({ id, tint, active = false }: { readonly id: string; readonly tint: string; readonly active?: boolean }) {
   if (id === 'home') {
     return (
       <svg width={19} height={17} viewBox="0 0 24 22" fill="none">
@@ -125,10 +134,13 @@ export function NavGlyph({ id, tint }: { readonly id: string; readonly tint: str
     );
   }
   if (id === 'assistant') {
+    // The real brand asset, at the same 18px scale as the glyphs either side
+    // of it, with its own aspect ratio and corner radius intact — the mark is
+    // never stretched, cropped, recoloured or wrapped in another icon.
     return (
-      <svg width={18} height={18} viewBox="0 0 24 24" fill="none">
-        <path d="M12 5v14M5 12h14" stroke={tint} strokeWidth={2.4} strokeLinecap="round" />
-      </svg>
+      <span style={{ display: 'flex', opacity: active ? 1 : 0.55, transition: 'opacity 180ms ease' }}>
+        <Logo size={18} />
+      </span>
     );
   }
   if (id === 'emergency') {
