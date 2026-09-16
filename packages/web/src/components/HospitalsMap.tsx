@@ -26,31 +26,42 @@ import { useEffect, useRef } from 'react';
 import type * as LEAFLET_TYPES from 'leaflet';
 import type { NearbyHospital } from '../api/client';
 
-const LEAFLET_CSS_ID = 'vitalis-leaflet-css';
-
 /**
- * A COMMITTED, VENDORED COPY of `node_modules/leaflet/dist/leaflet.css`
- * (leaflet@1.9.4), at `public/vendor/leaflet.css` — a plain static file
- * Vite serves as-is, not a package import.
+ * LEAFLET IS LOADED FROM COMMITTED STATIC FILES, NOT FROM `node_modules`.
  *
- * This used to be `import leafletCssUrl from 'leaflet/dist/leaflet.css?url'`
- * (Vite's asset-URL suffix, which resolves a package file's built URL
- * without inlining it — the same "cost only when this component actually
- * mounts" property the dynamic JS import below has). It built cleanly here,
- * but failed on Render: `Rollup failed to resolve import
- * "leaflet/dist/leaflet.css?url"`, because Render's build runs through
- * `yarn` against an npm-workspaces monorepo (package-lock.json, no
- * yarn.lock) — the two installers do not necessarily lay out a scoped
- * workspace's `node_modules` identically, and Rollup's resolver only needs
- * to miss the file once for the whole build to fail. A static public/ file
- * has no package resolution step at all, so there is nothing left for that
- * mismatch to break — whatever installer ran, this file is just HTTP-served
- * from where Vite already knows to find it.
+ * `public/vendor/leaflet.js` and `public/vendor/leaflet.css` are verbatim
+ * copies of leaflet@1.9.4's `dist/` files. Vite serves `public/` as-is, so
+ * neither one goes through package resolution at build time.
  *
- * Reproducing this on a leaflet upgrade: copy the new
- * `node_modules/leaflet/dist/leaflet.css` over this file.
+ * WHY, because this looks unusual and should not be "tidied up" back into
+ * imports: Render builds this service with `yarn`, while the repo is an
+ * npm-workspaces monorepo — `package-lock.json`, no `yarn.lock`. Yarn does
+ * not read npm's lockfile, and Render's cached `node_modules` predates
+ * leaflet being added, so on Render the package is simply absent. Two
+ * builds failed there in a row on exactly that, one import at a time:
+ *
+ *   Rollup failed to resolve import "leaflet/dist/leaflet.css?url"   (fixed first)
+ *   Rollup failed to resolve import "leaflet"                        (this one)
+ *
+ * Both are the same root cause, and chasing them import-by-import only
+ * finds the next one. Serving the library as a static asset removes the
+ * install step from the equation entirely: whatever package manager runs,
+ * and whatever it does or doesn't install, these two files ship.
+ *
+ * `leaflet` and `@types/leaflet` stay in package.json — the `import type`
+ * above is erased at build time (never resolved by Rollup), and keeping the
+ * dependency is what makes local typechecking real rather than guessed.
+ *
+ * On a leaflet upgrade: bump package.json, `npm install`, then copy
+ * `node_modules/leaflet/dist/leaflet.{js,css}` over these two files.
  */
+const LEAFLET_JS_URL = '/vendor/leaflet.js';
 const LEAFLET_CSS_URL = '/vendor/leaflet.css';
+const LEAFLET_CSS_ID = 'vitalis-leaflet-css';
+const LEAFLET_JS_ID = 'vitalis-leaflet-js';
+
+/** Leaflet's dist build is UMD: loading it defines the `L` global. */
+type LeafletGlobal = typeof LEAFLET_TYPES;
 
 function ensureLeafletCss(): void {
   if (document.getElementById(LEAFLET_CSS_ID) !== null) return;
@@ -59,6 +70,39 @@ function ensureLeafletCss(): void {
   link.rel = 'stylesheet';
   link.href = LEAFLET_CSS_URL;
   document.head.appendChild(link);
+}
+
+/**
+ * Resolves with the `L` global once the vendored script has run. Concurrent
+ * callers share one `<script>` rather than each appending their own — the
+ * tag is created once and every later call awaits that same element's load.
+ */
+function loadLeaflet(): Promise<LeafletGlobal> {
+  const existingGlobal = (window as unknown as { L?: LeafletGlobal }).L;
+  if (existingGlobal !== undefined) return Promise.resolve(existingGlobal);
+
+  return new Promise((resolve, reject) => {
+    const done = () => {
+      const L = (window as unknown as { L?: LeafletGlobal }).L;
+      if (L === undefined) reject(new Error('leaflet.js loaded but did not define L'));
+      else resolve(L);
+    };
+
+    const existing = document.getElementById(LEAFLET_JS_ID);
+    if (existing !== null) {
+      existing.addEventListener('load', done);
+      existing.addEventListener('error', () => reject(new Error('leaflet.js failed to load')));
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.id = LEAFLET_JS_ID;
+    script.src = LEAFLET_JS_URL;
+    script.async = true;
+    script.addEventListener('load', done);
+    script.addEventListener('error', () => reject(new Error('leaflet.js failed to load')));
+    document.head.appendChild(script);
+  });
 }
 
 export interface HospitalsMapProps {
@@ -77,9 +121,8 @@ export function HospitalsMap({ origin, hospitals }: HospitalsMapProps) {
     let map: LEAFLET_TYPES.Map | undefined;
 
     ensureLeafletCss();
-    void import('leaflet').then((LeafletModule) => {
+    void loadLeaflet().then((L) => {
       if (cancelled) return;
-      const L = LeafletModule.default ?? LeafletModule;
 
       map = L.map(el, {
         // A hospital list is a decision aid, not an exploration tool — no
@@ -123,6 +166,14 @@ export function HospitalsMap({ origin, hospitals }: HospitalsMapProps) {
       // guessing a zoom level — correct whether results are 500m apart or
       // spread across a whole city.
       map.fitBounds(bounds, { padding: [28, 28], maxZoom: 15 });
+    }).catch((err: unknown) => {
+      // The map is an enhancement over the hospital list, not the list
+      // itself — if the library can't load, the names, addresses, distances,
+      // Call and Directions buttons underneath are all still there and still
+      // correct. Logged, not surfaced: there is nothing the user could do
+      // about it, and an error card here would imply the results are
+      // unreliable when they aren't.
+      console.warn('[hospitals-map] leaflet unavailable, showing list only:', err);
     });
 
     return () => {
