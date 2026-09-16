@@ -1,11 +1,17 @@
 import { useState } from 'react';
 import { api, ApiError, type NearbyHospital } from '../api/client';
 import { EMERGENCY_NUMBER } from '../data/firstAidContent';
+import { HospitalsMap } from './HospitalsMap';
 
 type Status =
   | { readonly kind: 'idle' }
   | { readonly kind: 'loading' }
-  | { readonly kind: 'done'; readonly hospitals: readonly NearbyHospital[] }
+  // `origin` is kept alongside the results, not discarded after the fetch —
+  // it's what HospitalsMap plots the patient's own position from, and the
+  // ONLY other option would be re-reading `navigator.geolocation` a second
+  // time just to draw the map, asking for the same permission prompt twice
+  // for one search.
+  | { readonly kind: 'done'; readonly hospitals: readonly NearbyHospital[]; readonly origin: { readonly lat: number; readonly lng: number } }
   | { readonly kind: 'unavailable'; readonly message: string };
 
 /** Browser port of packages/mobile/src/components/HospitalsPanel.tsx — same
@@ -24,9 +30,10 @@ export function HospitalsPanel() {
     setStatus({ kind: 'loading' });
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        const origin = { lat: position.coords.latitude, lng: position.coords.longitude };
         api
-          .nearbyHospitals(position.coords.latitude, position.coords.longitude)
-          .then((result) => setStatus({ kind: 'done', hospitals: result.hospitals }))
+          .nearbyHospitals(origin.lat, origin.lng)
+          .then((result) => setStatus({ kind: 'done', hospitals: result.hospitals, origin }))
           .catch((err) => {
             // NEVER render the raw error. An upstream failure here used to
             // print "https://overpass-api.de/api/interpreter: fetch failed"
@@ -102,7 +109,9 @@ export function HospitalsPanel() {
           </button>
         </div>
       ) : (
-        status.hospitals.map((hospital, i) => (
+        <>
+        <HospitalsMap origin={status.origin} hospitals={status.hospitals} />
+        {status.hospitals.map((hospital, i) => (
           <div
             key={hospital.osmId}
             className="row"
@@ -139,7 +148,8 @@ export function HospitalsPanel() {
               </a>
             </div>
           </div>
-        ))
+        ))}
+        </>
       )}
       {status.kind === 'done' && status.hospitals.length > 0 && (
         <p className="foot" style={{ marginTop: 12, textAlign: 'center' }}>

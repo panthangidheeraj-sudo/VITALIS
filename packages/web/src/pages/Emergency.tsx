@@ -1,13 +1,24 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import type { BiologicalSex, CaseId } from '@triage/shared';
-import { api, ApiError, resolveOwnerUid, type CaseSummary, type TurnResponse } from '../api/client';
+import { api, ApiError, resolveOwnerUid, type CaseSummary, type ConfirmResult, type TurnResponse } from '../api/client';
 import { QUICK_SELECT_OPTIONS } from '../data/quickSelectTags';
 import { HoldButton } from '../components/HoldButton';
 import { HospitalsPanel } from '../components/HospitalsPanel';
+import { PhoneIcon } from '../components/icons';
+import { EMERGENCY_NUMBER } from '../data/firstAidContent';
+import { useContacts } from '../data/contactsStore';
+import { useProfile } from '../data/profileStore';
 
 const TIER_COLOR: Record<string, string> = { green: '#15803D', yellow: '#D97706', orange: '#EA580C', red: '#DC2626' };
 const TIER_LABEL: Record<string, string> = { green: 'LOW RISK', yellow: 'ELEVATED', orange: 'URGENT', red: 'CRITICAL' };
+const NOTIFY_STATUS_LABEL: Record<string, string> = {
+  queued: 'Queued',
+  sent: 'Sent',
+  delivered: 'Delivered',
+  failed: 'Failed',
+  suppressed: 'Not sent (dry run)',
+};
 
 /**
  * Ported from packages/mobile/src/screens/EmergencyScreen.tsx. Two real
@@ -23,6 +34,8 @@ const TIER_LABEL: Record<string, string> = { green: 'LOW RISK', yellow: 'ELEVATE
 export function Emergency() {
   const [searchParams] = useSearchParams();
   const openCaseId = searchParams.get('case') as CaseId | null;
+  const { contacts } = useContacts();
+  const { profile } = useProfile();
 
   const [caseId, setCaseId] = useState<CaseId | undefined>(openCaseId ?? undefined);
   const [summary, setSummary] = useState<CaseSummary | undefined>(undefined);
@@ -32,6 +45,9 @@ export function Emergency() {
   const [selected, setSelected] = useState<readonly string[]>([]);
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
+  const [notifyContacts, setNotifyContacts] = useState(true);
+  const [shareLocation, setShareLocation] = useState(false);
+  const [notifications, setNotifications] = useState<ConfirmResult['notifications']>([]);
   const [error, setError] = useState<string | undefined>(undefined);
 
   useEffect(() => {
@@ -121,17 +137,45 @@ export function Emergency() {
   const confirm = useCallback(
     async (heldMs: number) => {
       if (caseId === undefined) return;
+      // Captured BEFORE the request: `summary.routing.outcome` is what the
+      // hold-and-release gesture the caller just completed actually
+      // confirmed. `dispatch.status` on the response that follows would say
+      // the same thing, but reading it there would mean re-deriving "was
+      // this the ambulance outcome" from a field this app has always
+      // labelled `simulated: true` — see confirm-routing.ts. Nothing here
+      // treats that response as a real dispatch call; it never has been one
+      // and there is no service to call. Calling 108 is the one action that
+      // genuinely happens, and it happens because the outcome the user just
+      // confirmed said "ambulance", not because the server said anything.
+      const wasAmbulance = summary?.routing?.outcome === 'ambulance_dispatch';
       setBusy(true);
       setError(undefined);
       try {
-        setSummary(await api.confirm(caseId, heldMs));
+        const result = await api.confirm(caseId, heldMs, {
+          contacts: notifyContacts ? contacts : undefined,
+          patientName: profile.displayName.trim().length > 0 ? profile.displayName.trim() : undefined,
+          shareLocation,
+        });
+        setSummary(result);
+        setNotifications(result.notifications);
+        if (wasAmbulance) {
+          // Still inside the async chain the hold-and-release started, so
+          // most mobile browsers honour this as a user-activated navigation
+          // rather than blocking it as an unprompted redirect. It is a
+          // courtesy attempt, not the only path to the call: the banner
+          // rendered below (dispatch.status === 'dispatch_requested') is a
+          // real `tel:` link and stays on screen either way, for the
+          // browsers that do block it and for anyone who dismisses the
+          // dialer without completing the call.
+          window.location.href = `tel:${EMERGENCY_NUMBER}`;
+        }
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not confirm.');
       } finally {
         setBusy(false);
       }
     },
-    [caseId],
+    [caseId, summary, notifyContacts, contacts, profile.displayName, shareLocation],
   );
 
   if (caseId === undefined) {
@@ -233,7 +277,100 @@ export function Emergency() {
             {summary.routing.outcome.replace(/_/g, ' ')}
           </div>
           <p className="small" style={{ marginTop: 6 }}>{summary.routing.gate.consequenceStatement}</p>
+          {contacts.length > 0 ? (
+            // Both default sensibly rather than to "off": notifying the
+            // contacts the user specifically added is the point of having
+            // added them, so that one defaults ON; sharing location is a
+            // separate, more sensitive disclosure and stays opt-in, matching
+            // the server's own `shareLocation` default of false.
+            <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--danger-deep)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={notifyContacts} onChange={(e) => setNotifyContacts(e.target.checked)} style={{ width: 15, height: 15 }} />
+                Notify {contacts.length} emergency contact{contacts.length > 1 ? 's' : ''}
+              </label>
+              {notifyContacts ? (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--danger-deep)', cursor: 'pointer', marginLeft: 23 }}>
+                  <input type="checkbox" checked={shareLocation} onChange={(e) => setShareLocation(e.target.checked)} style={{ width: 15, height: 15 }} />
+                  Include my last known location
+                </label>
+              ) : null}
+            </div>
+          ) : (
+            <p className="foot" style={{ marginTop: 10 }}>
+              No emergency contacts saved — nobody will be notified. <Link to="/settings" style={{ color: 'var(--danger-deep)' }}>Add contacts in Settings</Link>.
+            </p>
+          )}
           <HoldButton onComplete={confirm} disabled={busy} />
+        </div>
+      ) : null}
+
+      {/*
+       * The real action, not a simulated one. `dispatch.status` reaching
+       * `dispatch_requested` (confirm-routing.ts) means the ambulance
+       * outcome was just confirmed through the hold-and-release gate above —
+       * but that itself is recorded as `simulated: true` on purpose, because
+       * there is no ambulance-dispatch API behind it to call. The one real
+       * action available is the phone: India's ambulance service is reached
+       * by dialling 108, same as First Aid's own call banner, which is
+       * exactly what this is. It stays on screen (not a one-shot toast)
+       * because the automatic dial attempted in `confirm` above is only a
+       * courtesy — some browsers block an unprompted `tel:` navigation, and
+       * this is the fallback for those and for anyone who backed out of the
+       * dialer.
+       */}
+      {summary?.dispatch.status === 'dispatch_requested' ? (
+        <a href={`tel:${EMERGENCY_NUMBER}`} className="call-banner fade-up">
+          <div className="call-phone-circle">
+            <PhoneIcon />
+          </div>
+          <div style={{ flex: 'none' }}>
+            <div style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 8.5, color: 'rgba(255,255,255,0.78)', letterSpacing: 1.2 }}>
+              CALL NOW
+            </div>
+            <div style={{ fontFamily: 'var(--font-sans)', fontWeight: 800, fontSize: 34, color: '#fff', letterSpacing: -0.5, lineHeight: '38px', marginTop: 1 }}>
+              {EMERGENCY_NUMBER}
+            </div>
+          </div>
+          <div className="call-divider" />
+          <p style={{ flex: 1, fontFamily: 'var(--font-sans)', fontSize: 12, lineHeight: 1.4, color: 'rgba(255,255,255,0.9)', margin: 0 }}>
+            Ambulance requested. Call {EMERGENCY_NUMBER} now to speak to a real dispatcher — this app cannot dispatch one for you.
+          </p>
+        </a>
+      ) : null}
+
+      {/*
+       * What actually happened to each notification, not just "it was
+       * requested". `TWILIO_LIVE=false` is a genuine, deliberate safety
+       * default (see twilio-notification-port.ts) — a `suppressed` status
+       * here is the app working exactly as configured, not a failure, and
+       * saying so plainly is what stops "did this actually send?" from
+       * looking like the whole feature is broken.
+       */}
+      {notifications.length > 0 ? (
+        <div className="glass card fade-up">
+          <div className="label">Emergency contact notifications</div>
+          <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {notifications.map((n) => {
+              const contact = contacts.find((c) => c.id === n.contactId);
+              return (
+                <div key={n.contactId} className="row" style={{ justifyContent: 'space-between' }}>
+                  <span className="small">{contact?.name ?? 'Contact'} · {n.channel}</span>
+                  <span
+                    className="foot"
+                    style={{ color: n.status === 'failed' ? 'var(--danger-deep)' : n.status === 'suppressed' ? 'var(--warn-deep)' : 'var(--ok)' }}
+                  >
+                    {NOTIFY_STATUS_LABEL[n.status] ?? n.status}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          {notifications.some((n) => n.status === 'suppressed') ? (
+            <p className="foot" style={{ marginTop: 8 }}>
+              "Not sent (dry run)" means this server is running with `TWILIO_LIVE=false` — messages are composed but
+              never put on the wire. This is a deliberate rehearsal setting, not an error.
+            </p>
+          ) : null}
         </div>
       ) : null}
 

@@ -21,7 +21,7 @@ afterEach(() => {
 });
 
 const CONFIG = {
-  apiKey: 'test-key',
+  apiKeys: ['test-key'],
   baseUrl: 'https://groq.test/v1',
   textModel: 'text-model',
   visionModel: 'vision-model',

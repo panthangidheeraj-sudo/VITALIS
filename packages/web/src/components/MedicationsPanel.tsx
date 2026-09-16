@@ -2,6 +2,11 @@ import { useState } from 'react';
 import { useMedications } from '../data/medicationStore';
 import { BellIcon } from './icons';
 import { AddPill } from './VitalsPanel';
+import { getPermission, isEnabled, notificationsSupported, requestPermission, setEnabled } from '../data/notifications';
+
+function readNotifStatus() {
+  return { supported: notificationsSupported(), enabled: isEnabled(), permission: getPermission() };
+}
 
 /** Ported from packages/mobile/src/components/MedicationsPanel.tsx — same
  * heading/"Add" link pattern, same empty-state "+ Add a reminder" pill,
@@ -13,6 +18,13 @@ export function MedicationsPanel() {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [at, setAt] = useState('');
+  // `getPermission()`/`isEnabled()` are plain reads (localStorage + the
+  // Notification API), not React state, so a change made ELSEWHERE — the
+  // Settings toggle — is picked up naturally on the next mount of this
+  // panel. What it can't pick up on its own is a change made from the
+  // button THIS panel renders below, hence the local copy and the re-read
+  // after `enableReminders` resolves.
+  const [notif, setNotif] = useState(readNotifStatus);
 
   const submit = () => {
     add(name, at);
@@ -20,6 +32,16 @@ export function MedicationsPanel() {
     setAt('');
     setAdding(false);
   };
+
+  // Requested from this click — same rule as Settings' identical toggle:
+  // browsers ignore or auto-deny a permission prompt made any other way.
+  const enableReminders = async () => {
+    const result = await requestPermission();
+    if (result === 'granted') setEnabled(true);
+    setNotif(readNotifStatus());
+  };
+
+  const notifOff = notif.supported && !(notif.enabled && notif.permission === 'granted');
 
   return (
     <div className="glass-panel">
@@ -35,6 +57,47 @@ export function MedicationsPanel() {
             </button>
           ) : null}
         </div>
+
+        {/*
+         * THE ACTUAL "reminders are not coming" FIX. The reminder engine
+         * itself was already correct (data/notifications.ts polls every 30s
+         * and fires a real Notification) — what nothing ever told the user
+         * is that notifications are OFF by default and need a permission
+         * grant, so every reminder added here silently went nowhere unless
+         * someone had separately found the toggle in Settings. This is the
+         * missing link between "I added a reminder" and "it will actually
+         * notify me", shown right where the reminder was added.
+         */}
+        {reminders.length > 0 && notifOff ? (
+          <div
+            className="small"
+            style={{
+              marginBottom: 12,
+              padding: '10px 12px',
+              borderRadius: 12,
+              background: 'var(--warn-wash)',
+              borderLeft: '3px solid var(--warn)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 10,
+            }}
+          >
+            <span>
+              {notif.permission === 'denied'
+                ? "Notifications are blocked in this browser, so reminders won't alert you. Allow them in your browser's site settings."
+                : "Reminders won't notify you until notifications are turned on."}
+            </span>
+            {notif.permission !== 'denied' ? (
+              <button
+                onClick={() => void enableReminders()}
+                style={{ flex: 'none', background: 'none', border: 'none', color: 'var(--warn-deep)', fontWeight: 700, fontSize: 12.5, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
+                Turn on
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {adding ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

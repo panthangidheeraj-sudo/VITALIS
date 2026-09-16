@@ -36,7 +36,7 @@ const TEST_CONFIG: ServerConfig = {
   nodeEnv: 'test',
   corsAllowedOrigins: undefined,
   firebase: { credentialsPath: undefined, projectId: undefined, enabled: false },
-  groq: { apiKey: undefined, baseUrl: 'http://127.0.0.1:9/v1', textModel: 'x', visionModel: 'y', enabled: false },
+  groq: { apiKeys: [], baseUrl: 'http://127.0.0.1:9/v1', textModel: 'x', visionModel: 'y', enabled: false },
   infermedica: { appId: undefined, appKey: undefined, baseUrl: '', enabled: false },
   icd11: {
     clientId: undefined,

@@ -138,6 +138,46 @@ textarea {
   padding: 18px;
 }
 
+/* --- HospitalsMap (Leaflet) -------------------------------------------------
+   The map itself is Leaflet's own canvas/tile rendering, out of CSS's
+   control — this only shapes the container it sits in (rounded to match
+   every other card on the screen, since Leaflet's default is square
+   corners) and draws the two pin styles as plain CSS instead of loading any
+   marker image asset (see HospitalsMap.tsx's header for why). */
+.hospitals-map {
+  width: 100%;
+  height: 220px;
+  border-radius: 16px;
+  overflow: hidden;
+  margin: 4px 0 14px;
+  border: 1px solid var(--glass-border);
+}
+
+.hospital-map-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hospital-map-pin span {
+  display: block;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(16, 42, 84, 0.35);
+}
+
+.hospital-map-pin-origin span {
+  width: 14px;
+  height: 14px;
+  background: var(--primary);
+}
+
+.hospital-map-pin-hospital span {
+  width: 12px;
+  height: 12px;
+  background: var(--danger, #dc2626);
+}
+
 .glass-blue {
   background: var(--glass-blue);
 }

@@ -18,6 +18,10 @@ export const VITALIS_STORAGE_KEYS = [
   'vitalis.vitals.v1',
   'vitalis.medications.v1',
   'vitalis.profile.v1',
+  // Emergency contacts' names and phone numbers — personal data about people
+  // OTHER than the device owner, which is exactly why clearing device data
+  // must not leave it behind either.
+  'vitalis.contacts.v1',
   // Assistant conversations.
   'vitalis.chatSessions.v1',
   'vitalis.chatActiveSession.v1',

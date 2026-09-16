@@ -28,7 +28,7 @@ export function createApp({ tools, config, firestoreEnabled }: AppDeps): Express
   // does not belong on the triage-scoped `ReasoningPort` interface.
   const chatPort = config.groq.enabled
     ? new GroqChatPort({
-        apiKey: config.groq.apiKey as string,
+        apiKeys: config.groq.apiKeys,
         baseUrl: config.groq.baseUrl,
         textModel: config.groq.textModel,
       })

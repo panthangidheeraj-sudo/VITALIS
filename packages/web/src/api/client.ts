@@ -56,6 +56,21 @@ export interface CaseSummary {
   readonly injury?: InjuryTracking;
 }
 
+/**
+ * What `confirm()` gets back beyond the usual `CaseSummary`: one outcome per
+ * contact that was notified, so the caller can show what actually happened
+ * (sent, suppressed by `TWILIO_LIVE=false`, or failed) instead of leaving a
+ * user who just added a contact wondering whether anything happened at all.
+ */
+export interface ConfirmResult extends CaseSummary {
+  readonly notifications: readonly {
+    readonly contactId: string;
+    readonly channel: string;
+    readonly status: string;
+    readonly failureReason?: string;
+  }[];
+}
+
 export interface TurnResponse extends CaseSummary {
   readonly turn: {
     readonly id: string;
@@ -219,11 +234,37 @@ export const api = {
   submitQuickSelect: (caseId: CaseId, tags: readonly string[]) =>
     request<TurnResponse>(`/cases/${caseId}/turns`, { kind: 'quick_select', quickSelectTags: tags }),
 
-  /** No `contacts`/`patientName` — the web app has no profile/contacts UI (out
-   * of scope for this pass); the server allows a confirm with neither, and
-   * still dispatches — it just tells nobody. */
-  confirm: (caseId: CaseId, heldMs: number) =>
-    request<CaseSummary>(`/cases/${caseId}/confirm`, { heldMs, shareLocation: false }),
+  /**
+   * `contacts`/`patientName`/`shareLocation` are all optional — omitting
+   * them still dispatches, it just tells nobody, same as before Settings
+   * grew an emergency-contacts panel (see data/contactsStore.ts). Every
+   * field here mirrors the server's `contactSchema` in routes/cases.ts
+   * exactly, so a contact built from `useContacts()` can be passed straight
+   * through without reshaping.
+   */
+  confirm: (
+    caseId: CaseId,
+    heldMs: number,
+    notify?: {
+      readonly contacts?: readonly {
+        readonly id: string;
+        readonly name: string;
+        readonly relationship: string;
+        readonly phoneE164: string;
+        readonly whatsappEnabled: boolean;
+        readonly smsEnabled: boolean;
+        readonly canRelay: boolean;
+      }[];
+      readonly patientName?: string;
+      readonly shareLocation?: boolean;
+    },
+  ) =>
+    request<ConfirmResult>(`/cases/${caseId}/confirm`, {
+      heldMs,
+      shareLocation: notify?.shareLocation ?? false,
+      ...(notify?.contacts !== undefined && notify.contacts.length > 0 ? { contacts: notify.contacts } : {}),
+      ...(notify?.patientName !== undefined && notify.patientName.length > 0 ? { patientName: notify.patientName } : {}),
+    }),
 
   cancel: (caseId: CaseId) => request<CaseSummary>(`/cases/${caseId}/cancel`),
 

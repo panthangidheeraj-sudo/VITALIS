@@ -17,10 +17,11 @@
  * to be.
  */
 
-import { requestJson } from './http.js';
+import { requestJsonWithKeys } from './http.js';
 
 export interface GroqChatConfig {
-  readonly apiKey: string;
+  /** Primary key first, then spares — see http.ts's `requestJsonWithKeys`. */
+  readonly apiKeys: readonly string[];
   readonly baseUrl: string;
   readonly textModel: string;
 }
@@ -65,25 +66,29 @@ export class GroqChatPort {
         ? ''
         : `\n\nREFERENCE SNIPPET (source: ${input.grounding.citationLabel}):\n${input.grounding.text}`;
 
-    const outcome = await requestJson<ChatCompletion>(`${this.config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.config.apiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: this.config.textModel,
-        // Warmer than the triage-loop calls (0.2): this is conversation, not
-        // a rehearsed demo trace, and a flat, repetitive tone reads as canned.
-        temperature: 0.5,
-        max_tokens: 300,
-        messages: [
-          { role: 'system', content: `${SYSTEM_PROMPT}${groundingBlock}` },
-          ...input.history.slice(-8),
-          { role: 'user', content: input.message },
-        ],
+    const outcome = await requestJsonWithKeys<ChatCompletion>(
+      `${this.config.baseUrl}/chat/completions`,
+      this.config.apiKeys,
+      (apiKey) => ({
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: this.config.textModel,
+          // Warmer than the triage-loop calls (0.2): this is conversation, not
+          // a rehearsed demo trace, and a flat, repetitive tone reads as canned.
+          temperature: 0.5,
+          max_tokens: 300,
+          messages: [
+            { role: 'system', content: `${SYSTEM_PROMPT}${groundingBlock}` },
+            ...input.history.slice(-8),
+            { role: 'user', content: input.message },
+          ],
+        }),
       }),
-    });
+    );
 
     if (!outcome.ok || outcome.value === undefined) {
       return { ok: false, message: 'Groq is unavailable right now.' };

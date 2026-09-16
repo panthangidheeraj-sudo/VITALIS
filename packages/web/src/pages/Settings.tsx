@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api/client';
 import { getPermission, isEnabled, notificationsSupported, requestPermission, setEnabled } from '../data/notifications';
+import { EmergencyContactsPanel } from '../components/EmergencyContactsPanel';
 import { useLanguage, type LanguageCode } from '../data/languageStore';
 import { useTranslation } from '../data/translations';
 import { VITALIS_STORAGE_KEYS } from '../data/storageKeys';
@@ -140,6 +141,8 @@ export function Settings() {
           </p>
         ) : null}
       </div>
+
+      <EmergencyContactsPanel />
 
       <div className="glass card">
         <div className="label">{t('settings.motion')}</div>

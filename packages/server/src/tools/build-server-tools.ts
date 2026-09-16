@@ -52,7 +52,7 @@ function buildReasoning(config: ServerConfig, clock: SystemClock) {
   const base = config.groq.enabled
     ? new GroqReasoningPort(
         {
-          apiKey: config.groq.apiKey as string,
+          apiKeys: config.groq.apiKeys,
           baseUrl: config.groq.baseUrl,
           textModel: config.groq.textModel,
           visionModel: config.groq.visionModel,

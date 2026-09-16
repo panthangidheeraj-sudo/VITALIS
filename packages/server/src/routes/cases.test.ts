@@ -25,7 +25,7 @@ const TEST_CONFIG: ServerConfig = {
   corsAllowedOrigins: undefined,
   firebase: { credentialsPath: undefined, projectId: undefined, enabled: false },
   groq: {
-    apiKey: undefined,
+    apiKeys: [],
     baseUrl: 'http://127.0.0.1:9/v1',
     textModel: 'x',
     visionModel: 'y',

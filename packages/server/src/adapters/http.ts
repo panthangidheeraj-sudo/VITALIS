@@ -206,6 +206,43 @@ export async function requestJson<T>(
 }
 
 /**
+ * Retries a JSON request across MULTIPLE credentials, not multiple attempts
+ * with the same one — for a provider where the operator has more than one
+ * key (Groq's free tier gave this project five spares, `GROQ_API_KEY_SPARE_1`
+ * through `_5`, sitting in `.env` completely unused: every call still went
+ * through the single primary key and a 429 on it read as "Groq is down" even
+ * while four other keys sat idle).
+ *
+ * `requestJson`'s own retry loop is deliberately for TRANSIENT failures on
+ * ONE credential (a timeout, a 5xx) — retrying a `rate_limited` or
+ * `unauthorized` response against the SAME key would just reproduce the same
+ * response `maxAttempts` times. This tries the next key instead, and only
+ * for those two failure kinds: an exhausted quota or an invalid/revoked
+ * credential are the two failure modes a different key can actually fix.
+ * Anything else (a bad request, a network failure, a provider outage) is not
+ * a key problem, and rotating through five keys to confirm that five times
+ * over would only make a real outage five times slower to report.
+ *
+ * `keys` must be non-empty — callers already gate construction on `enabled`,
+ * which requires at least the primary key.
+ */
+export async function requestJsonWithKeys<T>(
+  url: string,
+  keys: readonly string[],
+  buildOptions: (apiKey: string) => RequestOptions,
+): Promise<HttpOutcome<T>> {
+  let last: HttpOutcome<T> | undefined;
+  for (const key of keys) {
+    const outcome = await requestJson<T>(url, buildOptions(key));
+    if (outcome.ok) return outcome;
+    last = outcome;
+    if (outcome.error?.kind !== 'rate_limited' && outcome.error?.kind !== 'unauthorized') break;
+  }
+  // `keys` is non-empty, so the loop runs at least once and `last` is set.
+  return last as HttpOutcome<T>;
+}
+
+/**
  * Strips HTML tags and decodes the handful of entities these APIs actually
  * emit. Both MedlinePlus and the ICD-11 search wrap matched terms in markup
  * (`<span class="qt0">`, `<em class='found'>`), which would otherwise be read

@@ -48,7 +48,14 @@ export interface ServerConfig {
     readonly enabled: boolean;
   };
   readonly groq: {
-    readonly apiKey: string | undefined;
+    /**
+     * Primary key first, then `GROQ_API_KEY_SPARE_1`.._5 in order — every
+     * key the operator has configured, for `requestJsonWithKeys` (http.ts)
+     * to rotate through on a rate-limit or auth failure. Empty when
+     * `GROQ_API_KEY` itself is unset; `enabled` is what callers should
+     * check, not this array's length.
+     */
+    readonly apiKeys: readonly string[];
     readonly baseUrl: string;
     readonly textModel: string;
     readonly visionModel: string;
@@ -123,6 +130,17 @@ export function loadConfig(): ServerConfig {
   const infermedicaAppId = optional('INFERMEDICA_APP_ID');
   const infermedicaAppKey = optional('INFERMEDICA_APP_KEY');
   const groqApiKey = optional('GROQ_API_KEY');
+  // Primary first, spares after, in the fixed order an operator would add
+  // them — GROQ_API_KEY_SPARE_1 tried before _2, and so on — so rotation is
+  // deterministic rather than dependent on object key iteration order.
+  const groqApiKeys = [
+    groqApiKey,
+    optional('GROQ_API_KEY_SPARE_1'),
+    optional('GROQ_API_KEY_SPARE_2'),
+    optional('GROQ_API_KEY_SPARE_3'),
+    optional('GROQ_API_KEY_SPARE_4'),
+    optional('GROQ_API_KEY_SPARE_5'),
+  ].filter((key): key is string => key !== undefined);
   const geminiApiKey = optional('GEMINI_API_KEY');
   const twilioSid = optional('TWILIO_ACCOUNT_SID');
   const twilioToken = optional('TWILIO_AUTH_TOKEN');
@@ -138,8 +156,10 @@ export function loadConfig(): ServerConfig {
       enabled: credentialsPath !== undefined && projectId !== undefined,
     },
     groq: {
-      apiKey: groqApiKey,
+      apiKeys: groqApiKeys,
       baseUrl: optional('GROQ_BASE_URL') ?? 'https://api.groq.com/openai/v1',
+      // Unchanged meaning: still "is the primary key present", not "are any
+      // keys present" — a spare with no primary is not a supported shape.
       enabled: groqApiKey !== undefined,
       textModel: optional('GROQ_MODEL_TEXT') ?? 'openai/gpt-oss-120b',
       visionModel: optional('GROQ_MODEL_VISION') ?? 'openai/gpt-oss-120b',
@@ -207,7 +227,7 @@ export function describeCapabilities(config: ServerConfig): readonly string[] {
     // Reports the ADAPTER, not the credential: "key present" is not the same
     // claim as "calls are being made", and an earlier version conflated them.
     config.groq.enabled
-      ? `Reasoning      : LIVE — Groq ${config.groq.textModel} (vision: ${config.groq.visionModel}). Falls back to the deterministic stand-in on failure.`
+      ? `Reasoning      : LIVE — Groq ${config.groq.textModel} (vision: ${config.groq.visionModel}), ${config.groq.apiKeys.length} key${config.groq.apiKeys.length === 1 ? '' : 's'} configured for rotation. Falls back to the deterministic stand-in on failure.`
       : 'Reasoning      : mock reasoning port — no GROQ_API_KEY.',
     'Knowledge      : LIVE — MedlinePlus (NIH) primary, Wikipedia declared fallback.',
     'Medication     : LIVE — RxNorm/RxNav (NIH). Name normalisation only; interaction checking is NOT available (endpoint retired Jan 2024).',

@@ -48,7 +48,7 @@ import {
   translationSchema,
 } from '@triage/shared';
 import type { z } from 'zod';
-import { requestJson } from './http.js';
+import { requestJsonWithKeys } from './http.js';
 import {
   COMPOSE_RESPONSE_PROMPT,
   DESCRIBE_INJURY_PHOTO_PROMPT,
@@ -59,7 +59,8 @@ import {
 } from './groq-prompts.js';
 
 export interface GroqConfig {
-  readonly apiKey: string;
+  /** Primary key first, then spares — see http.ts's `requestJsonWithKeys`. */
+  readonly apiKeys: readonly string[];
   readonly baseUrl: string;
   readonly textModel: string;
   readonly visionModel: string;
@@ -320,31 +321,35 @@ export class GroqReasoningPort implements ReasoningPort {
     userJson: string | undefined,
     vision?: { model: string; content: unknown },
   ): Promise<{ value: T | undefined; latencyMs: number }> {
-    const outcome = await requestJson<ChatCompletion>(`${this.config.baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${this.config.apiKey}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: vision?.model ?? this.config.textModel,
-        // Deterministic-leaning. This is not a creative writing task, and a
-        // demo that picks a different question each run is hard to rehearse.
-        temperature: 0.2,
-        response_format: {
-          type: 'json_schema',
-          json_schema: {
-            name: schemaName,
-            strict: true,
-            schema: GROQ_JSON_SCHEMAS[schemaName],
-          },
+    const outcome = await requestJsonWithKeys<ChatCompletion>(
+      `${this.config.baseUrl}/chat/completions`,
+      this.config.apiKeys,
+      (apiKey) => ({
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${apiKey}`,
+          'content-type': 'application/json',
         },
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: vision?.content ?? userJson ?? '{}' },
-        ],
+        body: JSON.stringify({
+          model: vision?.model ?? this.config.textModel,
+          // Deterministic-leaning. This is not a creative writing task, and a
+          // demo that picks a different question each run is hard to rehearse.
+          temperature: 0.2,
+          response_format: {
+            type: 'json_schema',
+            json_schema: {
+              name: schemaName,
+              strict: true,
+              schema: GROQ_JSON_SCHEMAS[schemaName],
+            },
+          },
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: vision?.content ?? userJson ?? '{}' },
+          ],
+        }),
       }),
-    });
+    );
 
     if (!outcome.ok || outcome.value === undefined) {
       return { value: undefined, latencyMs: outcome.latencyMs };
