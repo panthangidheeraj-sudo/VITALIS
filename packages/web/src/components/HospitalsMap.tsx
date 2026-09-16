@@ -24,24 +24,40 @@
 
 import { useEffect, useRef } from 'react';
 import type * as LEAFLET_TYPES from 'leaflet';
-// `?url` (Vite's own asset-URL import suffix) gets the stylesheet's built
-// URL WITHOUT inlining its contents into this module — a plain
-// `import 'leaflet/dist/leaflet.css'` would bundle it into every page's CSS
-// regardless of whether this component ever mounts, the exact "cost only
-// when actually used" property the dynamic JS import below is for. The
-// `<link>` is appended lazily, alongside the JS, the one time this effect
-// runs.
-import leafletCssUrl from 'leaflet/dist/leaflet.css?url';
 import type { NearbyHospital } from '../api/client';
 
 const LEAFLET_CSS_ID = 'vitalis-leaflet-css';
+
+/**
+ * A COMMITTED, VENDORED COPY of `node_modules/leaflet/dist/leaflet.css`
+ * (leaflet@1.9.4), at `public/vendor/leaflet.css` — a plain static file
+ * Vite serves as-is, not a package import.
+ *
+ * This used to be `import leafletCssUrl from 'leaflet/dist/leaflet.css?url'`
+ * (Vite's asset-URL suffix, which resolves a package file's built URL
+ * without inlining it — the same "cost only when this component actually
+ * mounts" property the dynamic JS import below has). It built cleanly here,
+ * but failed on Render: `Rollup failed to resolve import
+ * "leaflet/dist/leaflet.css?url"`, because Render's build runs through
+ * `yarn` against an npm-workspaces monorepo (package-lock.json, no
+ * yarn.lock) — the two installers do not necessarily lay out a scoped
+ * workspace's `node_modules` identically, and Rollup's resolver only needs
+ * to miss the file once for the whole build to fail. A static public/ file
+ * has no package resolution step at all, so there is nothing left for that
+ * mismatch to break — whatever installer ran, this file is just HTTP-served
+ * from where Vite already knows to find it.
+ *
+ * Reproducing this on a leaflet upgrade: copy the new
+ * `node_modules/leaflet/dist/leaflet.css` over this file.
+ */
+const LEAFLET_CSS_URL = '/vendor/leaflet.css';
 
 function ensureLeafletCss(): void {
   if (document.getElementById(LEAFLET_CSS_ID) !== null) return;
   const link = document.createElement('link');
   link.id = LEAFLET_CSS_ID;
   link.rel = 'stylesheet';
-  link.href = leafletCssUrl;
+  link.href = LEAFLET_CSS_URL;
   document.head.appendChild(link);
 }
 
