@@ -38,13 +38,55 @@ const UNREADABLE = 'That photo could not be read from your device. Try another o
  * Never rejects — every failure is a returned `{ ok: false }` so callers
  * cannot forget a `.catch` and leave the UI stuck mid-read.
  */
-export function readImageFile(file: File): Promise<ImageReadResult> {
+/**
+ * Longest edge sent to the server. Gemini bills an image by how many tiles it
+ * covers, so a 4000x3000 phone photo costs several times what a 1280px one
+ * does for the same legible label — and it is also several MB to push over a
+ * mobile connection, which is the likelier cause of the scanner's "could not
+ * be read right now" (a timeout, not an unreadable photo). Label text is
+ * large relative to the frame, so 1280px loses nothing a human could read.
+ */
+const MAX_EDGE_PX = 1280;
+const JPEG_QUALITY = 0.82;
+/** Originals this big are fine once shrunk; the 6MB cap only guards the raw path. */
+const MAX_SOURCE_BYTES = 30_000_000;
+
+async function downscaleToJpeg(file: File): Promise<string> {
+  // createImageBitmap applies the photo's EXIF rotation, so a sideways phone
+  // shot arrives upright instead of being sent sideways.
+  const bitmap = await createImageBitmap(file);
+  try {
+    const scale = Math.min(1, MAX_EDGE_PX / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+    canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+    const ctx = canvas.getContext('2d');
+    if (ctx === null) throw new Error('no 2d context');
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', JPEG_QUALITY);
+  } finally {
+    bitmap.close();
+  }
+}
+
+export async function readImageFile(file: File): Promise<ImageReadResult> {
   if (!file.type.startsWith('image/')) {
-    return Promise.resolve({ ok: false, message: 'That file is not an image. Choose a JPG or PNG photo.' });
+    return { ok: false, message: 'That file is not an image. Choose a JPG or PNG photo.' };
   }
-  if (file.size > MAX_IMAGE_BYTES) {
-    return Promise.resolve({ ok: false, message: TOO_BIG(file.size) });
+  const canDownscale = typeof createImageBitmap === 'function' && typeof document !== 'undefined';
+  if (file.size > (canDownscale ? MAX_SOURCE_BYTES : MAX_IMAGE_BYTES)) {
+    return { ok: false, message: TOO_BIG(file.size) };
   }
+  if (canDownscale) {
+    try {
+      const shrunk = await downscaleToJpeg(file);
+      if (shrunk.length <= MAX_DATA_URL_CHARS) return { ok: true, dataUrl: shrunk };
+    } catch {
+      // Undecodable here (an exotic format, no canvas): fall through to the
+      // plain read below rather than failing a photo the server could take.
+    }
+  }
+  if (file.size > MAX_IMAGE_BYTES) return { ok: false, message: TOO_BIG(file.size) };
 
   return new Promise((resolve) => {
     const reader = new FileReader();

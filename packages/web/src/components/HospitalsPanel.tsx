@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api, ApiError, type NearbyHospital } from '../api/client';
 import { EMERGENCY_NUMBER } from '../data/firstAidContent';
 import { HospitalsMap } from './HospitalsMap';
+import { findHospitalsDirect } from '../data/overpassDirect';
 
 type Status =
   | { readonly kind: 'idle' }
@@ -11,7 +12,7 @@ type Status =
   // ONLY other option would be re-reading `navigator.geolocation` a second
   // time just to draw the map, asking for the same permission prompt twice
   // for one search.
-  | { readonly kind: 'done'; readonly hospitals: readonly NearbyHospital[]; readonly origin: { readonly lat: number; readonly lng: number } }
+  | { readonly kind: 'done'; readonly hospitals: readonly NearbyHospital[]; readonly origin: { readonly lat: number; readonly lng: number }; readonly viaBrowser?: boolean }
   | { readonly kind: 'unavailable'; readonly message: string };
 
 /** Browser port of packages/mobile/src/components/HospitalsPanel.tsx — same
@@ -35,18 +36,21 @@ export function HospitalsPanel() {
           .nearbyHospitals(origin.lat, origin.lng)
           .then((result) => setStatus({ kind: 'done', hospitals: result.hospitals, origin }))
           .catch((err) => {
-            // NEVER render the raw error. An upstream failure here used to
-            // print "https://overpass-api.de/api/interpreter: fetch failed"
-            // into the Emergency screen. The server already replaces its own
-            // diagnostics with a user-facing sentence, but a transport
-            // failure between browser and server (offline, CORS, 502 HTML
-            // from a proxy) would still surface an internal string, so this
-            // side never trusts the message either.
+            // NEVER render the raw error (it once printed an upstream URL into
+            // this screen). But a server-side failure is not the end: the
+            // server reaches Overpass from a shared hosting IP the public
+            // instances throttle, while this phone is on its own network. Ask
+            // OpenStreetMap directly before giving up — same real data, same
+            // rules (see data/overpassDirect.ts).
             if (err instanceof ApiError) console.warn(`[hospitals] ${err.code}: ${err.message}`);
-            setStatus({
-              kind: 'unavailable',
-              message: 'Nearby hospitals are temporarily unavailable. Please try again.',
-            });
+            findHospitalsDirect(origin)
+              .then((hospitals) => setStatus({ kind: 'done', hospitals, origin, viaBrowser: true }))
+              .catch(() =>
+                setStatus({
+                  kind: 'unavailable',
+                  message: 'Nearby hospitals are temporarily unavailable. Please try again.',
+                }),
+              );
           });
       },
       (error) => {
@@ -153,7 +157,8 @@ export function HospitalsPanel() {
       )}
       {status.kind === 'done' && status.hospitals.length > 0 && (
         <p className="foot" style={{ marginTop: 12, textAlign: 'center' }}>
-          Names, addresses and locations from OpenStreetMap. Call ahead to confirm details.
+          Names, addresses and locations from OpenStreetMap
+          {status.viaBrowser === true ? ', fetched directly on your device' : ''}. Call ahead to confirm details.
         </p>
       )}
     </div>

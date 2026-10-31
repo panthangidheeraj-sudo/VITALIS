@@ -67,6 +67,11 @@ export interface OsmHospitalConfig {
 const FALLBACK_OVERPASS_URLS: readonly string[] = [
   'https://overpass.private.coffee/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
+  // Global, and slow (~10s+), but it is a different operator on different
+  // infrastructure — useful precisely when the faster ones are unreachable
+  // from this host. Only ever relevant now that mirrors are raced, not
+  // walked in order: it costs nothing when an earlier one answers first.
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
 
 interface OverpassElement {
@@ -87,8 +92,8 @@ interface OverpassResponse {
  * ONE attempt per instance, not two. Retrying the same struggling endpoint is
  * how the old 25s x 2 budget turned one bad instance into a 50-second wait;
  * moving to the next instance is both faster and likelier to work. A healthy
- * Overpass answers this query in 3-4s, so 12s is generous, and the whole
- * three-instance walk still finishes inside ~36s worst case.
+ * Overpass answers this query in 3-4s, so 12s is generous, and mirrors are
+ * raced in parallel, so the worst case is one timeout, not their sum.
  */
 const OVERPASS_POLICY = {
   maxAttempts: 1,
@@ -138,33 +143,10 @@ export class OsmHospitalPort implements HospitalPort {
     const query = `[out:json][timeout:10];nwr(around:${radiusM},${request.origin.lat},${request.origin.lng})[amenity=hospital];out center ${Math.min(request.limit * 4, 40)};`;
 
     const endpoints = [this.config.overpassUrl, ...FALLBACK_OVERPASS_URLS.filter((u) => u !== this.config.overpassUrl)];
-    let elements: readonly OverpassElement[] | undefined;
-    let totalLatencyMs = 0;
-    let lastError: ToolError | undefined;
-
-    for (const endpoint of endpoints) {
-      const outcome = await requestJson<OverpassResponse>(endpoint, {
-        method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query)}`,
-        policy: OVERPASS_POLICY,
-      });
-      totalLatencyMs += outcome.latencyMs;
-
-      // An Overpass instance under load answers with an XML/HTML error
-      // document, which `requestJson` surfaces as an invalid_response rather
-      // than a transport error - so BOTH shapes have to fail over, not just
-      // the dead-socket one.
-      if (outcome.ok && outcome.value !== undefined) {
-        elements = outcome.value.elements ?? [];
-        break;
-      }
-      lastError = outcome.error ?? { kind: 'unavailable', message: 'Overpass unreachable.', retryable: true };
-      // Per-instance, because "hospitals are unavailable" is indistinguishable
-      // from "this one instance is rate-limiting us" without it — and which
-      // one it is decides whether to reorder the list or just wait.
-      console.warn(`[osm] overpass instance failed (${lastError.kind}): ${lastError.message}`);
-    }
+    const raced = await raceOverpass(endpoints, query);
+    const elements = raced.elements;
+    const totalLatencyMs = raced.latencyMs;
+    const lastError = raced.lastError;
 
     if (elements === undefined) {
       // Every instance failed. If this area was looked up recently enough,
@@ -244,6 +226,68 @@ export class OsmHospitalPort implements HospitalPort {
       0,
     );
   }
+}
+
+/**
+ * Asks every mirror AT ONCE and takes the first useful answer.
+ *
+ * This replaced a sequential walk (12s x N mirrors). Measured against the
+ * real server with the mirrors degraded, that walk made one request take
+ * 36s — the full sum of every timeout — because a dead mirror cost its whole
+ * budget before the next was even tried. Raced, the cost is the FASTEST
+ * working mirror, or one timeout when none work, regardless of how many
+ * mirrors there are.
+ *
+ * "Useful" means a NON-EMPTY answer. A regional extract (overpass.osm.ch is
+ * Switzerland only) answers 200 with zero elements for anywhere else, and a
+ * fast empty answer must not beat a slower real one — the file header's
+ * reason for listing global instances only. An empty answer is accepted only
+ * if every mirror has finished and none had anything, which is the honest
+ * "no hospitals within range" case.
+ *
+ * One request per mirror, same as before: the load on each donated service
+ * is unchanged, it simply arrives together instead of in sequence.
+ */
+async function raceOverpass(
+  endpoints: readonly string[],
+  query: string,
+): Promise<{ elements: readonly OverpassElement[] | undefined; latencyMs: number; lastError: ToolError | undefined }> {
+  const startedAt = Date.now();
+  let lastError: ToolError | undefined;
+  let emptyAnswer: readonly OverpassElement[] | undefined;
+
+  return new Promise((resolve) => {
+    let pending = endpoints.length;
+    let settled = false;
+    const finish = (elements: readonly OverpassElement[] | undefined) => {
+      if (settled) return;
+      settled = true;
+      resolve({ elements, latencyMs: Date.now() - startedAt, lastError });
+    };
+
+    for (const endpoint of endpoints) {
+      void requestJson<OverpassResponse>(endpoint, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: `data=${encodeURIComponent(query)}`,
+        policy: OVERPASS_POLICY,
+      }).then((outcome) => {
+        // An instance under load answers with an XML/HTML error document,
+        // which requestJson surfaces as invalid_response — so that fails
+        // over exactly like a dead socket does.
+        if (outcome.ok && outcome.value !== undefined) {
+          const found = outcome.value.elements ?? [];
+          if (found.length > 0) finish(found);
+          else emptyAnswer = found;
+        } else {
+          lastError = outcome.error ?? { kind: 'unavailable', message: 'Overpass unreachable.', retryable: true };
+          console.warn(`[osm] overpass instance failed (${lastError.kind}): ${lastError.message}`);
+        }
+        pending -= 1;
+        if (pending === 0) finish(emptyAnswer);
+      });
+    }
+  });
 }
 
 interface RankedHospital {

@@ -32,11 +32,18 @@ import type {
   ToolResult,
 } from '@triage/shared';
 import { VISIBLE_SIGNS, failedResult, liveResult, photoObservationSchema } from '@triage/shared';
-import { requestJson, VISION_POLICY } from './http.js';
+import { requestJsonWithKeys, VISION_POLICY } from './http.js';
 import { DESCRIBE_INJURY_PHOTO_PROMPT } from './groq-prompts.js';
 
 export interface GeminiConfig {
   readonly apiKey: string;
+  /**
+   * Extra keys tried in order when the primary is rate-limited or rejected.
+   * Free-tier Gemini quota is per Google Cloud PROJECT, not per key — two keys
+   * minted in the same project share one 20/day allowance, so these only help
+   * when they come from different projects or accounts.
+   */
+  readonly spareKeys?: readonly string[];
   readonly baseUrl: string;
   readonly visionModel: string;
 }
@@ -102,10 +109,12 @@ export class GeminiVisionPort implements ReasoningPort {
       );
     }
 
-    const outcome = await requestJson<GeminiResponse>(
-      `${this.config.baseUrl}/models/${this.config.visionModel}:generateContent` +
-        `?key=${encodeURIComponent(this.config.apiKey)}`,
-      {
+    const outcome = await requestJsonWithKeys<GeminiResponse>(
+      (key) =>
+        `${this.config.baseUrl}/models/${this.config.visionModel}:generateContent` +
+        `?key=${encodeURIComponent(key)}`,
+      [this.config.apiKey, ...(this.config.spareKeys ?? [])],
+      () => ({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -126,7 +135,7 @@ export class GeminiVisionPort implements ReasoningPort {
           },
         }),
         policy: VISION_POLICY,
-      },
+      }),
     );
 
     if (!outcome.ok || outcome.value === undefined) {

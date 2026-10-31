@@ -14,7 +14,6 @@ import { z } from 'zod';
 import type { KnowledgePort, MedicationPort } from '@triage/shared';
 import type { ChatTurn, GroqChatPort } from '../adapters/groq-chat-port.js';
 import type { GeminiConfig } from '../adapters/gemini-vision-port.js';
-import { classifyImage } from '../adapters/gemini-image-classify.js';
 import { describeVisionFailure, identifyMedicine } from '../adapters/gemini-medicine-vision.js';
 import { lookupMedicineInfo, USES_CAVEAT } from '../adapters/medicine-info.js';
 
@@ -127,31 +126,31 @@ export function createAssistantRoutes(
         return;
       }
 
-      const classified = await classifyImage(gemini, parsed.data.photoRef);
-      if (!classified.ok) {
+      // ONE Gemini request per photo, not two. This used to classify first and
+      // then identify, which spent two of the ~20 free daily requests on every
+      // medicine photo. The identify call now also reports what the photo IS,
+      // so the classification arrives with the answer instead of before it.
+      const identified = await identifyMedicine(gemini, parsed.data.photoRef);
+      if (!identified.ok) {
         // Upstream detail is a server-side diagnostic. It named the provider
         // endpoint and, before http.ts started stripping query strings, the
         // API key with it — so the client gets a plain sentence either way.
-        console.warn(`[assistant/image] classify failed (${classified.kind}): ${classified.message}`);
-        const described = describeVisionFailure(classified.kind);
-        res.status(502).json({ error: 'classify_failed', reason: described.reason, message: described.message });
-        return;
-      }
-
-      if (classified.data.kind === 'injury') {
-        res.json({ kind: 'injury', classification: classified.data });
-        return;
-      }
-      if (classified.data.kind === 'other') {
-        res.json({ kind: 'other', classification: classified.data });
-        return;
-      }
-
-      const identified = await identifyMedicine(gemini, parsed.data.photoRef);
-      if (!identified.ok) {
         console.warn(`[assistant/image] identify failed (${identified.kind}): ${identified.message}`);
         const described = describeVisionFailure(identified.kind);
         res.status(502).json({ error: 'identify_failed', reason: described.reason, message: described.message });
+        return;
+      }
+      const classification = {
+        kind: identified.data.imageKind,
+        confidence: identified.data.confidence,
+        reason: identified.data.notes,
+      };
+      if (identified.data.imageKind === 'injury') {
+        res.json({ kind: 'injury', classification });
+        return;
+      }
+      if (identified.data.imageKind === 'other') {
+        res.json({ kind: 'other', classification });
         return;
       }
       const medicine = identified.data;
@@ -197,7 +196,7 @@ export function createAssistantRoutes(
 
       res.json({
         kind: 'medicine',
-        classification: classified.data,
+        classification,
         medicine: {
           productName: medicine.productName,
           genericName: medicine.genericName ?? info?.genericName,

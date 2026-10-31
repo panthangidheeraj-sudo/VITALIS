@@ -48,7 +48,7 @@ const TEST_CONFIG: ServerConfig = {
   },
   knowledge: { medlinePlusSearchUrl: 'http://127.0.0.1:9/q', wikipediaBaseUrl: 'http://127.0.0.1:9' },
   rxnav: { baseUrl: 'http://127.0.0.1:9' },
-  gemini: { apiKey: undefined, baseUrl: 'http://127.0.0.1:9', visionModel: 'x', enabled: false },
+  gemini: { apiKey: undefined, spareKeys: [], baseUrl: 'http://127.0.0.1:9', visionModel: 'x', enabled: false },
   twilio: {
     accountSid: undefined,
     authToken: undefined,

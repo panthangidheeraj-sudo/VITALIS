@@ -182,6 +182,10 @@ export function FloatingLines({
   linesGradient = ['#1D4ED8', '#60A5FA', '#FFFFFF'],
 }: FloatingLinesProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const wavesKey = enabledWaves.join(',');
+  const countKey = JSON.stringify(lineCount ?? null);
+  const distanceKey = JSON.stringify(lineDistance ?? null);
+  const gradientKey = linesGradient.join(',');
 
   useEffect(() => {
     const el = containerRef.current;
@@ -331,7 +335,17 @@ export function FloatingLines({
       cancelled = true;
       teardown?.();
     };
-  }, [enabledWaves, lineCount, lineDistance, bendRadius, bendStrength, interactive, parallax, animationSpeed, linesGradient]);
+    // Keyed by VALUE, not identity. Callers pass these as inline literals
+    // (`lineCount={[10, 15, 20]}`), which are a brand-new array on every
+    // render — so with the arrays themselves in this list the effect re-ran on
+    // every re-render of the host page, tearing down the WebGL context and
+    // building another. On the Assistant that is every keystroke and every
+    // backspace, and a freshly created canvas paints white before its first
+    // frame: the white flash on each letter typed. Serialising to a string
+    // makes "same numbers" compare equal, so the renderer is only rebuilt when
+    // a setting actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wavesKey, countKey, distanceKey, bendRadius, bendStrength, interactive, parallax, animationSpeed, gradientKey]);
 
   return <div ref={containerRef} className="floating-lines" aria-hidden="true" />;
 }

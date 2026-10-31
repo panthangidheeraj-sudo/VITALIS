@@ -22,7 +22,8 @@
 
 import type { ToolErrorKind } from '@triage/shared';
 import type { GeminiConfig } from './gemini-vision-port.js';
-import { requestJson, VISION_POLICY } from './http.js';
+import { createHash } from 'node:crypto';
+import { requestJsonWithKeys, VISION_POLICY } from './http.js';
 
 /**
  * Why a failure carries a KIND and not just a sentence.
@@ -87,6 +88,8 @@ export function describeVisionFailure(kind: ToolErrorKind): {
 }
 
 export interface MedicineIdentification {
+  /** What the photo IS — decided in the same call, so no separate classify request is needed. */
+  readonly imageKind: 'medicine' | 'injury' | 'other';
   readonly productName: string | undefined;
   /** The active-ingredient name if printed on the pack (brands usually print it). */
   readonly genericName: string | undefined;
@@ -119,6 +122,7 @@ interface GeminiResponse {
 const MEDICINE_SCHEMA = {
   type: 'OBJECT',
   properties: {
+    imageKind: { type: 'STRING', enum: ['medicine', 'injury', 'other'] },
     productName: { type: 'STRING', nullable: true },
     genericName: { type: 'STRING', nullable: true },
     strength: { type: 'STRING', nullable: true },
@@ -131,10 +135,12 @@ const MEDICINE_SCHEMA = {
     confidence: { type: 'NUMBER', minimum: 0, maximum: 1 },
     notes: { type: 'STRING' },
   },
-  required: ['confidence', 'notes', 'expiryAmbiguous'],
+  required: ['imageKind', 'confidence', 'notes', 'expiryAmbiguous'],
 } as const;
 
-const PROMPT = `You are reading a photograph of a medicine package (box, blister strip, or bottle label) for a patient. Extract ONLY what is actually legible in the image, except for uses and cautions where you can use your medical knowledge based on the identified product name.
+const PROMPT = `First decide imageKind: "medicine" if the photo shows a medicine package, strip, sachet, bottle or loose tablets; "injury" if it mainly shows a part of a person's body with a wound, burn, swelling, rash or similar; "other" for anything else (objects, documents, scenery). A package may be photographed upside down or at an angle — still "medicine" if it is one; read it as best you can. For "injury" and "other", leave every other field null, set confidence to how sure you are of the imageKind, and say in notes what the photo shows.
+
+You are reading a photograph of a medicine package (box, blister strip, sachet or bottle label) for a patient. Extract ONLY what is actually legible in the image, except for uses and cautions where you can use your medical knowledge based on the identified product name.
 
 Rules, no exceptions:
 - If the product name is not clearly legible, set productName to null. Never guess a plausible-sounding drug name.
@@ -149,6 +155,21 @@ Rules, no exceptions:
 - notes must state plainly which fields you could not read, e.g. "Expiry date not clearly visible - please verify from the package." Always mention anything uncertain.
 - Never diagnose, never suggest a dose, never say a medicine is safe for this person.`;
 
+/**
+ * Same photo, same answer, no second request.
+ *
+ * Free-tier Gemini is ~20 requests/day, and the most common way to burn them
+ * is retrying: a failed or doubtful scan makes people press "Scan another"
+ * with the same pack, and re-picking the same file sends the identical bytes.
+ * Only SUCCESSES are cached (a failure must stay retryable), keyed by a hash
+ * of the exact image, held in memory for an hour and capped so a long-lived
+ * process cannot grow without bound. Lost on restart, which is fine: it is a
+ * quota saver, not a store.
+ */
+const RESULT_CACHE = new Map<string, { at: number; data: MedicineIdentification }>();
+const RESULT_CACHE_TTL_MS = 60 * 60 * 1000;
+const RESULT_CACHE_MAX = 40;
+
 const DATA_URL = /^data:(image\/[a-z+]+);base64,(.+)$/i;
 
 export async function identifyMedicine(
@@ -160,9 +181,14 @@ export async function identifyMedicine(
     return { ok: false, message: 'Photo must be supplied as a base64 data URL.', kind: 'bad_request' };
   }
 
-  const outcome = await requestJson<GeminiResponse>(
-    `${config.baseUrl}/models/${config.visionModel}:generateContent?key=${encodeURIComponent(config.apiKey)}`,
-    {
+  const cacheKey = createHash('sha256').update(imageRef).digest('hex');
+  const hit = RESULT_CACHE.get(cacheKey);
+  if (hit !== undefined && Date.now() - hit.at < RESULT_CACHE_TTL_MS) return { ok: true, data: hit.data };
+
+  const outcome = await requestJsonWithKeys<GeminiResponse>(
+    (key) => `${config.baseUrl}/models/${config.visionModel}:generateContent?key=${encodeURIComponent(key)}`,
+    [config.apiKey, ...(config.spareKeys ?? [])],
+    () => ({
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -176,10 +202,19 @@ export async function identifyMedicine(
             ],
           },
         ],
-        generationConfig: { temperature: 0.1, responseMimeType: 'application/json', responseSchema: MEDICINE_SCHEMA },
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: 'application/json',
+          responseSchema: MEDICINE_SCHEMA,
+          // Reading a label is transcription, not reasoning. Verified against
+          // the live model: a budget of 0 is accepted and produces no hidden
+          // "thought" tokens, which otherwise count against both the output
+          // budget and the request's latency.
+          thinkingConfig: { thinkingBudget: 0 },
+        },
       }),
       policy: VISION_POLICY,
-    },
+    }),
   );
 
   if (!outcome.ok || outcome.value === undefined) {
@@ -211,9 +246,8 @@ export async function identifyMedicine(
   const confidence = typeof r['confidence'] === 'number' ? Math.min(1, Math.max(0, r['confidence'])) : 0;
   const notes = typeof r['notes'] === 'string' && r['notes'].length > 0 ? r['notes'] : 'No details returned.';
 
-  return {
-    ok: true,
-    data: {
+  const data: MedicineIdentification = {
+      imageKind: r['imageKind'] === 'injury' || r['imageKind'] === 'other' ? r['imageKind'] : 'medicine',
       productName: typeof r['productName'] === 'string' ? r['productName'] : undefined,
       genericName: typeof r['genericName'] === 'string' ? r['genericName'] : undefined,
       strength: typeof r['strength'] === 'string' ? r['strength'] : undefined,
@@ -225,6 +259,8 @@ export async function identifyMedicine(
       cautions: typeof r['cautions'] === 'string' ? r['cautions'] : undefined,
       confidence,
       notes,
-    },
   };
+  RESULT_CACHE.set(cacheKey, { at: Date.now(), data });
+  if (RESULT_CACHE.size > RESULT_CACHE_MAX) RESULT_CACHE.delete(RESULT_CACHE.keys().next().value as string);
+  return { ok: true, data };
 }

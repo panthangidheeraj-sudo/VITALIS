@@ -227,13 +227,14 @@ export async function requestJson<T>(
  * which requires at least the primary key.
  */
 export async function requestJsonWithKeys<T>(
-  url: string,
+  /** A function when the credential travels IN the URL (Gemini's `?key=`). */
+  url: string | ((apiKey: string) => string),
   keys: readonly string[],
   buildOptions: (apiKey: string) => RequestOptions,
 ): Promise<HttpOutcome<T>> {
   let last: HttpOutcome<T> | undefined;
   for (const key of keys) {
-    const outcome = await requestJson<T>(url, buildOptions(key));
+    const outcome = await requestJson<T>(typeof url === 'function' ? url(key) : url, buildOptions(key));
     if (outcome.ok) return outcome;
     last = outcome;
     if (outcome.error?.kind !== 'rate_limited' && outcome.error?.kind !== 'unauthorized') break;

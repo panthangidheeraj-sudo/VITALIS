@@ -98,6 +98,8 @@ export interface ServerConfig {
    */
   readonly gemini: {
     readonly apiKey: string | undefined;
+    /** GEMINI_API_KEY_SPARE_1.._3, in order — see GeminiConfig.spareKeys. */
+    readonly spareKeys: readonly string[];
     readonly baseUrl: string;
     readonly visionModel: string;
     readonly enabled: boolean;
@@ -186,6 +188,9 @@ export function loadConfig(): ServerConfig {
     rxnav: { baseUrl: optional('RXNAV_BASE_URL') ?? 'https://rxnav.nlm.nih.gov/REST' },
     gemini: {
       apiKey: geminiApiKey,
+      spareKeys: [optional('GEMINI_API_KEY_SPARE_1'), optional('GEMINI_API_KEY_SPARE_2'), optional('GEMINI_API_KEY_SPARE_3')].filter(
+        (k): k is string => k !== undefined,
+      ),
       baseUrl: optional('GEMINI_BASE_URL') ?? 'https://generativelanguage.googleapis.com/v1beta',
       visionModel: optional('GEMINI_VISION_MODEL') ?? 'gemini-3.6-flash',
       enabled: geminiApiKey !== undefined,

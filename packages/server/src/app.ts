@@ -83,6 +83,7 @@ export function createApp({ tools, config, firestoreEnabled }: AppDeps): Express
   const geminiConfig = config.gemini.enabled
     ? {
         apiKey: config.gemini.apiKey as string,
+        spareKeys: config.gemini.spareKeys,
         baseUrl: config.gemini.baseUrl,
         visionModel: config.gemini.visionModel,
       }

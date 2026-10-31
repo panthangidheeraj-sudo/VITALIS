@@ -50,6 +50,7 @@ const TEST_CONFIG: ServerConfig = {
   rxnav: { baseUrl: 'http://127.0.0.1:9' },
   gemini: {
     apiKey: undefined,
+    spareKeys: [],
     baseUrl: 'http://127.0.0.1:9',
     visionModel: 'x',
     enabled: false,
