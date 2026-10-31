@@ -19,14 +19,16 @@
 import type {
   AgentTools,
   CaseState,
+  Hospital,
   HospitalMatch,
+  Millis,
   IsoTimestamp,
   NotificationRecord,
   PreArrivalSummary,
   TimelineEntry,
   ToolCallRecord,
 } from '@triage/shared';
-import { asTimelineEntryId, asTurnId, estimateTravelMinutes, haversineKm } from '@triage/shared';
+import { asTimelineEntryId, asTurnId, estimateTravelMinutes, failedResult, haversineKm } from '@triage/shared';
 import { callTool, type CallToolContext } from './ledger.js';
 
 export interface ConfirmRoutingResult {
@@ -48,6 +50,58 @@ function mkEntry(
   partial: Omit<TimelineEntry, 'id' | 'recordedAt' | 'at'>,
 ): TimelineEntry {
   return { id: asTimelineEntryId(ids.newId('tl')), at, recordedAt: at, ...partial };
+}
+
+/**
+ * How long the hospital match may hold up a CONFIRMED emergency.
+ *
+ * This is not the hospital port's own budget and must not be confused with
+ * it: OVERPASS_POLICY (osm-hospital-port.ts) allows 12s per public instance
+ * across three instances, which is a sane ceiling for the "Find nearby
+ * hospitals" button — a user tapped it and is willing to wait for a list.
+ *
+ * It is NOT sane here. Measured against the real server with Overpass
+ * degraded, a confirm took 36.6 SECONDS to return, because every mirror
+ * timed out in turn while the request sat open. Everything the patient is
+ * waiting on sits behind that response: the dispatch state change, the
+ * emergency-contact messages, and — on the web client — the automatic dial
+ * to the emergency number. A map lookup is not allowed to delay any of
+ * those, least of all by half a minute, in the one moment this app exists
+ * for.
+ *
+ * So the lookup gets a hard deadline on this path. Losing the race is not
+ * an error and is not retried: `hospital` simply stays undefined, exactly
+ * as it already does when Overpass fails outright, and the handoff card
+ * renders without a matched hospital rather than with a stale or guessed
+ * one. The routing decision, the gate and the notifications are unaffected
+ * — none of them ever depended on this.
+ */
+const HOSPITAL_MATCH_DEADLINE_MS = 4_000;
+
+/**
+ * Resolves to `onDeadline()` if `operation` has not settled in time.
+ *
+ * The losing request is abandoned, not cancelled — the port has no abort
+ * handle to pass in, and a late reply is harmless because nothing reads it
+ * after the race. The timer is always cleared so a settled operation cannot
+ * leave a pending handle holding the process open.
+ */
+async function withDeadline<T>(
+  operation: () => Promise<T>,
+  deadlineMs: number,
+  onDeadline: () => T,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation(),
+      new Promise<T>((resolve) => {
+        timer = setTimeout(() => resolve(onDeadline()), deadlineMs);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 export async function confirmRouting(
@@ -97,12 +151,40 @@ export async function confirmRouting(
       'osm.find_hospitals',
       `origin=${state.lastKnownLocation.lat},${state.lastKnownLocation.lng}`,
       () =>
-        tools.hospitals.findNearby({
-          origin: state.lastKnownLocation!,
-          radiusKm: 20,
-          requireEmergencyDepartment: true,
-          limit: 5,
-        }),
+        withDeadline(
+          () =>
+            tools.hospitals.findNearby({
+              origin: state.lastKnownLocation!,
+              radiusKm: 20,
+              requireEmergencyDepartment: true,
+              limit: 5,
+            }),
+          HOSPITAL_MATCH_DEADLINE_MS,
+          // Reported as a real failure, not quietly as "no hospitals found":
+          // the distinction between "we looked and the area has none" and "we
+          // ran out of time" is exactly what the ledger and the degradation
+          // notice exist to preserve.
+          () =>
+            failedResult<readonly Hospital[]>(
+              {
+                kind: 'timeout',
+                message: `hospital match exceeded ${HOSPITAL_MATCH_DEADLINE_MS}ms on the confirm path`,
+                retryable: true,
+              },
+              HOSPITAL_MATCH_DEADLINE_MS as Millis,
+              {
+                tool: 'osm.find_hospitals',
+                reason: 'timeout',
+                userFacingMessage:
+                  'We could not match a hospital in time, so none is shown. Your emergency request still went through.',
+                fallbackUsed: 'none — the request proceeded without a matched hospital',
+                // No clinical bearing: this decorates the handoff card and
+                // cannot move a risk tier or a routing outcome in any
+                // direction, so there is nothing to round conservatively.
+                conservative: true,
+              },
+            ),
+        ),
     );
     if (hospitalResult.ok && hospitalResult.data.length > 0) {
       const best = hospitalResult.data[0]!;

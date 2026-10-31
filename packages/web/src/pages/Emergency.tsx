@@ -47,6 +47,7 @@ export function Emergency() {
   const [busy, setBusy] = useState(false);
   const [notifyContacts, setNotifyContacts] = useState(true);
   const [shareLocation, setShareLocation] = useState(false);
+  const [locationNotice, setLocationNotice] = useState<string | undefined>(undefined);
   const [notifications, setNotifications] = useState<ConfirmResult['notifications']>([]);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -134,6 +135,64 @@ export function Emergency() {
     }
   }, [answer, applyTurn, caseId]);
 
+  /**
+   * Ticking "include my location" actually SENDS the location.
+   *
+   * `shareLocation: true` on its own only tells the server it may include
+   * `state.lastKnownLocation` in the contact message — it does not supply
+   * one. Nothing in packages/web ever called `POST /cases/:id/location`
+   * (packages/mobile does, via location/reportLocation.ts), so for a web
+   * case that field was always undefined. Two things were silently broken
+   * by that, not one:
+   *
+   *   - this checkbox, which promised to share a location the server did
+   *     not have — the exact "decorative switch" this app says it does not
+   *     ship; and
+   *   - hospital matching in confirm-routing.ts, which is gated on
+   *     `lastKnownLocation !== undefined` and so never ran for a web case
+   *     at all, for ANY routing outcome.
+   *
+   * Reporting it on the tick rather than during `confirm` is deliberate:
+   * the tick is an unhurried, explicit act of consent, whereas confirm is
+   * the time-critical path and must not wait on a GPS fix. Unticking does
+   * not retract what was already sent — the server keeps the last known
+   * position either way — so the copy says "include", not "share now".
+   */
+  const toggleShareLocation = useCallback(
+    (next: boolean) => {
+      setShareLocation(next);
+      setLocationNotice(undefined);
+      if (!next || caseId === undefined) return;
+      if (!('geolocation' in navigator)) {
+        setShareLocation(false);
+        setLocationNotice('This browser cannot provide a location.');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          api
+            .reportLocation(caseId, position.coords.latitude, position.coords.longitude)
+            .catch((err: unknown) => {
+              // Never fatal: the confirmation itself must not depend on this.
+              if (err instanceof ApiError) console.warn(`[location] ${err.code}: ${err.message}`);
+              setShareLocation(false);
+              setLocationNotice('Your location could not be sent. Confirming will still work.');
+            });
+        },
+        (geoError) => {
+          setShareLocation(false);
+          setLocationNotice(
+            geoError.code === 1
+              ? 'Location permission was denied, so it cannot be included.'
+              : 'Your location could not be read, so it cannot be included.',
+          );
+        },
+        { enableHighAccuracy: true, timeout: 10_000 },
+      );
+    },
+    [caseId],
+  );
+
   const confirm = useCallback(
     async (heldMs: number) => {
       if (caseId === undefined) return;
@@ -150,6 +209,29 @@ export function Emergency() {
       const wasAmbulance = summary?.routing?.outcome === 'ambulance_dispatch';
       setBusy(true);
       setError(undefined);
+
+      // DIAL FIRST, THEN TALK TO THE SERVER — the order matters, and it is
+      // the opposite of what it was.
+      //
+      // The dial never depended on the response: `routing.outcome` above is
+      // already the confirmed decision, and the server has no ambulance
+      // service to call on our behalf (`dispatch.simulated` is always true).
+      // Awaiting the request first meant the dialer opened only once the
+      // confirm came back — and the confirm can be slow for reasons that
+      // have nothing to do with the emergency. Measured against the real
+      // server with Overpass degraded, it took 36.6 SECONDS, every one of
+      // them spent on a hospital lookup, with the patient watching a button
+      // that had already been held. A deadline on the server side now caps
+      // that (see confirm-routing.ts), but no server-side budget should be
+      // what stands between a confirmed emergency and the phone ringing.
+      //
+      // Doing it here also keeps the navigation inside the user-activation
+      // window the hold-and-release opened, which is what stops a browser
+      // treating it as an unprompted redirect and blocking it.
+      if (wasAmbulance) {
+        window.location.href = `tel:${EMERGENCY_NUMBER}`;
+      }
+
       try {
         const result = await api.confirm(caseId, heldMs, {
           contacts: notifyContacts ? contacts : undefined,
@@ -158,17 +240,6 @@ export function Emergency() {
         });
         setSummary(result);
         setNotifications(result.notifications);
-        if (wasAmbulance) {
-          // Still inside the async chain the hold-and-release started, so
-          // most mobile browsers honour this as a user-activated navigation
-          // rather than blocking it as an unprompted redirect. It is a
-          // courtesy attempt, not the only path to the call: the banner
-          // rendered below (dispatch.status === 'dispatch_requested') is a
-          // real `tel:` link and stays on screen either way, for the
-          // browsers that do block it and for anyone who dismisses the
-          // dialer without completing the call.
-          window.location.href = `tel:${EMERGENCY_NUMBER}`;
-        }
       } catch (err) {
         setError(err instanceof ApiError ? err.message : 'Could not confirm.');
       } finally {
@@ -290,9 +361,12 @@ export function Emergency() {
               </label>
               {notifyContacts ? (
                 <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'var(--font-sans)', fontSize: 12.5, color: 'var(--danger-deep)', cursor: 'pointer', marginLeft: 23 }}>
-                  <input type="checkbox" checked={shareLocation} onChange={(e) => setShareLocation(e.target.checked)} style={{ width: 15, height: 15 }} />
+                  <input type="checkbox" checked={shareLocation} onChange={(e) => toggleShareLocation(e.target.checked)} style={{ width: 15, height: 15 }} />
                   Include my last known location
                 </label>
+              ) : null}
+              {locationNotice !== undefined ? (
+                <p className="foot" style={{ margin: 0, marginLeft: 23, color: 'var(--danger-deep)' }}>{locationNotice}</p>
               ) : null}
             </div>
           ) : (
